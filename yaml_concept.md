@@ -553,7 +553,7 @@ FIELDS:
     
       
 
-示例
+## 示例
 
 ```yaml
 apiVersion: v1
@@ -577,7 +577,7 @@ spec:
     imagePullPolicy: IfNotPresent  #本地有就用本地，如果没有就拉取官方镜像
 ```
 
-应用ymal
+## 应用ymal查看状态
 
 ```bash
 [root@master1 opt]#  kubectl get pods -n default -o wide
@@ -664,3 +664,64 @@ Events:
   Normal   Pulled         2m22s                  kubelet            Container image "nginx" already present on machine
 ```
 
+## 查看容器日志
+
+```bash
+[root@master1 opt]# kubectl  logs tomcat-pod -c tomcat-pod-java
+07-Dec-2021 15:58:39.429 INFO [main] org.apache.catalina.startup.VersionLoggerListener.log Server version:        Apache Tomcat/8.5.41
+07-Dec-2021 15:58:39.433 INFO [main] org.apache.catalina.startup.VersionLoggerListener.log Server built:          May 4 2019 09:17:16 UTC
+07-Dec-2021 15:58:39.433 INFO [main] org.apache.catalina.startup.VersionLoggerListener.log Server number:         8.5.41.0
+07-Dec-2021 15:58:39.435 INFO [main] org.apache.catalina.startup.VersionLoggerListener.log OS Name:               Linux
+07-Dec-2021 15:58:39.435 INFO [main] org.apache.catalina.startup.VersionLoggerListener.log OS Version:            3.10.0-693.21.1.el7.x86_64
+07-Dec-2021 15:58:39.435 INFO [main] org.apache.catalina.startup.VersionLoggerListener.log Architecture:          amd64
+07-Dec-2021 15:58:39.435 INFO [main] org.apache.catalina.startup.VersionLoggerListener.log Java Home:             /usr/lib/jvm/java-1.8-openjdk/jre
+07-Dec-2021 15:58:39.435 INFO [main] org.apache.catalina.startup.VersionLoggerListener.log JVM Version:           1.8.0_212-b04
+07-Dec-2021 15:58:39.436 INFO [main] org.apache.catalina.startup.VersionLoggerListener.log JVM Vendor:            IcedTea
+07-Dec-2021 15:58:39.436 INFO [main] org.apache.catalina.startup.VersionLoggerListener.log CATALINA_BASE:         /usr/local/tomcat
+07-Dec-2021 15:58:39.436 INFO [main] org.apache.catalina.startup.VersionLoggerListener.log CATALINA_HOME:         /usr/local/tomcat
+07-Dec-2021 15:58:39.438 INFO [main] org.apache.catalina.startup.VersionLoggerListener.log Command line argument: -Djava.util.logging.config.file=/usr/local/tomcat/conf/logging.properties
+07-Dec-2021 15:58:39.438 INFO [main] org.apache.catalina.startup.VersionLoggerListener.log Command line argument: -Djava.util.logging.manager=org.apache.juli.ClassLoaderLogManager
+07-Dec-2021 15:58:39.438 INFO [main] org.apache.catalina.startup.VersionLoggerListener.log Command line argument: -Djdk.tls.ephemeralDHKeySize=2048
+07-Dec-2021 15:58:39.439 INFO [main] org.apache.catalina.startup.VersionLoggerListener.log Command line argument: -Djava.protocol.handler.pkgs=org.apache.catalina.webresources
+07-Dec-2021 15:58:39.439 INFO [main] org.apache.catalina.startup.VersionLoggerListener.log Command line argument: -Dorg.apache.catalina.security.SecurityListener.UMASK=0027
+07-Dec-2021 15:58:39.439 INFO [main] org.apache.catalina.startup.VersionLoggerListener.log Command line argument: -Dignore.endorsed.dirs=
+07-Dec-2021 15:58:39.440 INFO [main] org.apache.catalina.startup.VersionLoggerListener.log Command line argument: -Dcatalina.base=/usr/local/tomcat
+07-Dec-2021 15:58:39.440 INFO [main] org.apache.catalina.startup.VersionLoggerListener.log Command line argument: -Dcatalina.home=/usr/local/tomcat
+07-Dec-2021 15:58:39.440 INFO [main] org.apache.catalina.startup.VersionLoggerListener.log Command line argument: -Djava.io.tmpdir=/usr/local/tomcat/temp
+07-Dec-2021 15:58:39.441 INFO [main] org.apache.catalina.core.AprLifecycleListener.lifecycleEvent Loaded APR based Apache Tomcat Native library [1.2.21] using APR version [1.6.5].
+07-Dec-2021 15:58:39.441 INFO [main] org.apache.catalina.core.AprLifecycleListener.lifecycleEvent APR capabilities: IPv6 [true], sendfile [true], accept filters [false], random [true].
+07-Dec-2021 15:58:39.442 INFO [main] org.apache.catalina.core.AprLifecycleListener.lifecycleEvent APR/OpenSSL configuration: useAprConnector [false], useOpenSSL [true]
+07-Dec-2021 15:58:39.450 INFO [main] org.apache.catalina.core.AprLifecycleListener.initializeSSL OpenSSL successfully initialized [OpenSSL 1.1.1b  26 Feb 2019]
+07-Dec-2021 15:58:39.641 INFO [main] org.apache.coyote.AbstractProtocol.init Initializing ProtocolHandler ["http-nio-8080"]
+07-Dec-2021 15:58:39.662 INFO [main] org.apache.tomcat.util.net.NioSelectorPool.getSharedSelector Using a shared selector for servlet write/read
+07-Dec-2021 15:58:39.693 INFO [main] org.apache.coyote.AbstractProtocol.init Initializing ProtocolHandler ["ajp-nio-8009"]
+07-Dec-2021 15:58:39.695 INFO [main] org.apache.tomcat.util.net.NioSelectorPool.getSharedSelector Using a shared selector for servlet write/read
+07-Dec-2021 15:58:39.697 INFO [main] org.apache.catalina.startup.Catalina.load Initialization processed in 1024 ms
+07-Dec-2021 15:58:39.743 INFO [main] org.apache.catalina.core.StandardService.startInternal Starting service [Catalina]
+07-Dec-2021 15:58:39.743 INFO [main] org.apache.catalina.core.StandardEngine.startInternal Starting Servlet Engine: Apache Tomcat/8.5.41
+07-Dec-2021 15:58:39.767 INFO [localhost-startStop-1] org.apache.catalina.startup.HostConfig.deployDirectory Deploying web application directory [/usr/local/tomcat/webapps/docs]
+07-Dec-2021 15:59:40.634 WARNING [localhost-startStop-1] org.apache.catalina.util.SessionIdGeneratorBase.createSecureRandom Creation of SecureRandom instance for session ID generation using [SHA1PRNG] took [60,492] milliseconds.
+07-Dec-2021 15:59:40.671 INFO [localhost-startStop-1] org.apache.catalina.startup.HostConfig.deployDirectory Deployment of web application directory [/usr/local/tomcat/webapps/docs] has finished in [60,905] ms
+07-Dec-2021 15:59:40.671 INFO [localhost-startStop-1] org.apache.catalina.startup.HostConfig.deployDirectory Deploying web application directory [/usr/local/tomcat/webapps/examples]
+07-Dec-2021 15:59:41.801 INFO [localhost-startStop-1] org.apache.catalina.startup.HostConfig.deployDirectory Deployment of web application directory [/usr/local/tomcat/webapps/examples] has finished in [1,130] ms
+07-Dec-2021 15:59:41.801 INFO [localhost-startStop-1] org.apache.catalina.startup.HostConfig.deployDirectory Deploying web application directory [/usr/local/tomcat/webapps/ROOT]
+07-Dec-2021 15:59:41.868 INFO [localhost-startStop-1] org.apache.catalina.startup.HostConfig.deployDirectory Deployment of web application directory [/usr/local/tomcat/webapps/ROOT] has finished in [67] ms
+07-Dec-2021 15:59:41.869 INFO [localhost-startStop-1] org.apache.catalina.startup.HostConfig.deployDirectory Deploying web application directory [/usr/local/tomcat/webapps/manager]
+07-Dec-2021 15:59:41.970 INFO [localhost-startStop-1] org.apache.catalina.startup.HostConfig.deployDirectory Deployment of web application directory [/usr/local/tomcat/webapps/manager] has finished in [100] ms
+07-Dec-2021 15:59:41.970 INFO [localhost-startStop-1] org.apache.catalina.startup.HostConfig.deployDirectory Deploying web application directory [/usr/local/tomcat/webapps/host-manager]
+07-Dec-2021 15:59:42.038 INFO [localhost-startStop-1] org.apache.catalina.startup.HostConfig.deployDirectory Deployment of web application directory [/usr/local/tomcat/webapps/host-manager] has finished in [68] ms
+07-Dec-2021 15:59:42.062 INFO [main] org.apache.coyote.AbstractProtocol.start Starting ProtocolHandler ["http-nio-8080"]
+07-Dec-2021 15:59:42.146 INFO [main] org.apache.coyote.AbstractProtocol.start Starting ProtocolHandler ["ajp-nio-8009"]
+07-Dec-2021 15:59:42.150 INFO [main] org.apache.catalina.startup.Catalina.start Server startup in 62453 ms
+```
+
+## 进入容器
+
+```bash
+
+[root@master1 opt]# kubectl exec -it tomcat-pod -c nginx -- sh
+# cd /bin
+# ls
+bash   chmod  dash  df	   dnsdomainname  egrep  findmnt  gzexe     ln	   lsblk  mktemp  mountpoint	 pidof	readlink  run-parts  sleep  sync      touch   uname	  wdctl		zcmp	zfgrep	zless
+cat    chown  date  dir    domainname	  false  grep	  gzip	    login  mkdir  more	  mv		 pwd	rm	  sed	     stty   tar       true    uncompress  ypdomainname	zdiff	zforce	zmore
+chgrp  cp     dd    dmesg  echo		  fgrep  gunzip   hostname  ls	   mknod  mount   nisdomainname  rbash	rmdir	  sh	     su     tempfile  umount  vdir	  zcat		zegrep	zgrep	znew
