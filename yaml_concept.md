@@ -556,6 +556,7 @@ FIELDS:
 示例
 
 ```yaml
+apiVersion: v1
 kind: Pod
 metadata:
   name: tomcat-pod
@@ -568,10 +569,98 @@ spec:
     ports:
     - containerPort: 8080
     image: tomcat:8.5-jre8-alpine
-    imagePullPolicy: IfNotPresent  #本地有就用本地，如果没有就拉取官方镜像
+    imagePullPolicy: IfNotPresent
   - name:  nginx
     ports:
     - containerPort: 80
-    image: nginx：alpine
+    image: nginx
     imagePullPolicy: IfNotPresent  #本地有就用本地，如果没有就拉取官方镜像
 ```
+
+应用ymal
+
+```bash
+[root@master1 opt]#  kubectl get pods -n default -o wide
+NAME                        READY   STATUS    RESTARTS      AGE     IP                NODE    NOMINATED NODE   READINESS GATES
+my-nginx-5b56ccd65f-6tqg9   1/1     Running   0             135m    192.168.166.139   node1   <none>           <none>
+my-nginx-5b56ccd65f-vfrtl   1/1     Running   0             135m    192.168.104.12    node2   <none>           <none>
+tomcat-pod                  2/2     Running   1 (59s ago)   2m14s   192.168.104.13    node2   <none>           <none>
+[root@master1 opt]# kubectl  describe pods tomcat-pod
+Name:         tomcat-pod
+Namespace:    default
+Priority:     0
+Node:         node2/192.168.0.110
+Start Time:   Tue, 07 Dec 2021 23:58:37 +0800
+Labels:       tomcat=tomcat-pod
+Annotations:  cni.projectcalico.org/podIP: 192.168.104.13/32
+              cni.projectcalico.org/podIPs: 192.168.104.13/32
+Status:       Running
+IP:           192.168.104.13
+IPs:
+  IP:  192.168.104.13
+Containers:
+  tomcat-pod-java:
+    Container ID:   docker://6d1363532d996353ba5e138edce9321c35d8fee3c31218e712b40b76c16c685e
+    Image:          tomcat:8.5-jre8-alpine
+    Image ID:       docker://sha256:8b8b1eb786b54145731e1cd36e1de208d10defdbb0b707617c3e7ddb9d6d99c8
+    Port:           8080/TCP
+    Host Port:      0/TCP
+    State:          Running
+      Started:      Tue, 07 Dec 2021 23:58:38 +0800
+    Ready:          True
+    Restart Count:  0
+    Environment:    <none>
+    Mounts:
+      /var/run/secrets/kubernetes.io/serviceaccount from kube-api-access-lgd85 (ro)
+  nginx:
+    Container ID:   docker://0c78f07cee1156a287d0110830776a9caede5a4b10f058602a4edc0ccede8361
+    Image:          nginx
+    Image ID:       docker-pullable://nginx@sha256:9522864dd661dcadfd9958f9e0de192a1fdda2c162a35668ab6ac42b465f0603
+    Port:           80/TCP
+    Host Port:      0/TCP
+    State:          Running
+      Started:      Tue, 07 Dec 2021 23:59:52 +0800
+    Last State:     Terminated
+      Reason:       Completed
+      Exit Code:    0
+      Started:      Tue, 07 Dec 2021 23:59:43 +0800
+      Finished:     Tue, 07 Dec 2021 23:59:52 +0800
+    Ready:          True
+    Restart Count:  1
+    Environment:    <none>
+    Mounts:
+      /var/run/secrets/kubernetes.io/serviceaccount from kube-api-access-lgd85 (ro)
+Conditions:
+  Type              Status
+  Initialized       True
+  Ready             True
+  ContainersReady   True
+  PodScheduled      True
+Volumes:
+  kube-api-access-lgd85:
+    Type:                    Projected (a volume that contains injected data from multiple sources)
+    TokenExpirationSeconds:  3607
+    ConfigMapName:           kube-root-ca.crt
+    ConfigMapOptional:       <nil>
+    DownwardAPI:             true
+QoS Class:                   BestEffort
+Node-Selectors:              <none>
+Tolerations:                 node.kubernetes.io/not-ready:NoExecute op=Exists for 300s
+                             node.kubernetes.io/unreachable:NoExecute op=Exists for 300s
+Events:
+  Type     Reason         Age                    From               Message
+  ----     ------         ----                   ----               -------
+  Normal   Scheduled      3m37s                  default-scheduler  Successfully assigned default/tomcat-pod to node2
+  Normal   Pulled         3m36s                  kubelet            Container image "tomcat:8.5-jre8-alpine" already present on machine
+  Normal   Created        3m36s                  kubelet            Created container tomcat-pod-java
+  Normal   Started        3m36s                  kubelet            Started container tomcat-pod-java
+  Warning  InspectFailed  2m57s (x6 over 3m36s)  kubelet            Failed to apply default image tag "nginx：alpine": couldn't parse image reference "nginx：alpine": invalid reference format
+  Warning  Failed         2m57s (x6 over 3m36s)  kubelet            Error: InvalidImageName
+  Normal   Pulling        2m51s                  kubelet            Pulling image "nginx:alpine"
+  Normal   Pulled         2m31s                  kubelet            Successfully pulled image "nginx:alpine" in 19.997293352s
+  Normal   Created        2m22s (x2 over 2m31s)  kubelet            Created container nginx
+  Normal   Started        2m22s (x2 over 2m31s)  kubelet            Started container nginx
+  Normal   Killing        2m22s                  kubelet            Container nginx definition changed, will be restarted
+  Normal   Pulled         2m22s                  kubelet            Container image "nginx" already present on machine
+```
+
