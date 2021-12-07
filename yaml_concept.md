@@ -569,7 +569,7 @@ spec:
     - containerPort: 8080
     image: tomcat:8.5-jre8-alpine
     imagePullPolicy: IfNotPresent  #本地有就用本地，如果没有就拉取官方镜像
-  - name:  ngin x
+  - name:  nginx
     ports:
     - containerPort: 80
     image: nginx：alpine
