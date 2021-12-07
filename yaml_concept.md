@@ -1,6 +1,6 @@
-# [Yaml 概念](https://kubernetes.io/zh/docs/concepts/workloads/pods/)
+# [pod概念](https://kubernetes.io/zh/docs/concepts/workloads/pods/)
 
-​		![pod](./pic/pod.svg)
+​		![pod概念](./pic/pod.svg)
 
 ## 查看帮助文档
 
@@ -311,7 +311,7 @@ FIELDS:
          AutomountServiceAccountToken indicates whether a service account token
          should be automatically mounted.
     
-       containers	<[]Object> -required-
+       containers	<[]Object> -required-  # 必填字段
          List of containers belonging to the pod. Containers cannot currently be
          added or removed. There must be at least one container in a Pod. Cannot be
          updated.
@@ -509,6 +509,49 @@ FIELDS:
          List of volumes that can be mounted by containers belonging to the pod.
          More info: https://kubernetes.io/docs/concepts/storage/volumes
     ```
+    
+    * 查看ports 定义
+    
+      ```bash
+      [root@master1 ~]# kubectl explain pods.spec.containers.ports
+      KIND:     Pod
+      VERSION:  v1
+      
+      RESOURCE: ports <[]Object>
+      
+      DESCRIPTION:
+           List of ports to expose from the container. Exposing a port here gives the
+           system additional information about the network connections a container
+           uses, but is primarily informational. Not specifying a port here DOES NOT
+           prevent that port from being exposed. Any port which is listening on the
+           default "0.0.0.0" address inside a container will be accessible from the
+           network. Cannot be updated.
+      
+           ContainerPort represents a network port in a single container.
+      
+      FIELDS:
+         containerPort	<integer> -required-
+           Number of port to expose on the pod's IP address. This must be a valid port
+           number, 0 < x < 65536.
+      
+         hostIP	<string>
+           What host IP to bind the external port to.
+      
+         hostPort	<integer>
+           Number of port to expose on the host. If specified, this must be a valid
+           port number, 0 < x < 65536. If HostNetwork is specified, this must match
+           ContainerPort. Most containers do not need this.
+      
+         name	<string>
+           If specified, this must be an IANA_SVC_NAME and unique within the pod. Each
+           named port in a pod must have a unique name. Name for the port that can be
+           referred to by services.
+      
+         protocol	<string>
+           Protocol for port. Must be UDP, TCP, or SCTP. Defaults to "TCP".
+      ```
+    
+      
 
 示例
 
