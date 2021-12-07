@@ -1,0 +1,229 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-rules
+  namespace: prometheus
+data:
+  general.rules: |
+    groups:
+    - name: general.rules
+      rules:
+      - alert: InstanceDown
+        expr: up == 0
+        for: 1m
+        labels:
+          severity: critical 
+        annotations:
+          summary: "Instance {{ $labels.instance }} 停止工作"
+          description: "{{ $labels.instance }} job {{ $labels.job }} 已经停止5分钟以上."
+  node.rules: |
+    groups:
+    - name: node.rules
+      rules:
+      - alert: NodeReady
+        expr: kube_node_status_condition{condition="Ready",status="true"} == 0 
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Instance {{ $labels.instance }} Kubernetes Node ready"
+          description: "Node {{ $labels.node }} has been unready for a long time (当前值: {{ $value }})"
+      - alert: KubernetesPersistentvolumeError
+        expr: kube_persistentvolume_status_phase{phase=~"Failed|Pending",job="kubernetes-stat-metircs"} > 0  
+        for: 0m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Instance {{ $labels.instance }} Kubernetes PersistentVolume critical"
+          description: "pv状态不正常 (当前值: {{ $value }})"
+      - alert: NodeFilesystemUsage
+        expr: 100 - (node_filesystem_free_bytes{fstype=~"ext4|xfs"} / node_filesystem_size_bytes{fstype=~"ext4|xfs"} * 100) > 80 
+        for: 1m
+        labels:
+          severity: warning 
+        annotations:
+          summary: "Instance {{ $labels.instance }} : {{ $labels.mountpoint }} 分区使用率过高"
+          description: "{{ $labels.instance }}: {{ $labels.mountpoint }} 分区使用大于80% (当前值: {{ $value }})"
+
+      - alert: NodeMemoryUsage
+        expr: 100 - (node_memory_MemFree_bytes+node_memory_Cached_bytes+node_memory_Buffers_bytes) / node_memory_MemTotal_bytes * 100 > 80
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Instance {{ $labels.instance }} 内存使用率过高"
+          description: "{{ $labels.instance }}内存使用大于80% (当前值: {{ $value }})"
+
+      - alert: NodeCPUUsage    
+        expr: 100 - (avg(irate(node_cpu_seconds_total{mode="idle"}[5m])) by (instance) * 100) > 60 
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Instance {{ $labels.instance }} CPU使用率过高"       
+          description: "{{ $labels.instance }}CPU使用大于60% (当前值: {{ $value }})"
+
+  pod.rules: |
+    groups:
+    - name: pod.rules
+      rules:
+      - alert: PodCpuUsage
+        expr: sum(irate(container_cpu_usage_seconds_total{container !="",container!="POD"}[2m])) by (container, pod,node,namespace) / (sum(container_spec_cpu_quota{container !="",container!="POD"}/100000) by (container, pod,node,namespace)) * 100 > 80
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Instance {{ $labels.node }} Container CPU使用率过高"
+          description: "{{ $labels.node }} Container CPU使用大于80% (当前值: {{ $value }})"
+      - alert: PodMemoryUsage
+        expr: (sum(container_memory_working_set_bytes{name!~"POD"}) by (name) / sum(container_spec_memory_limit_bytes> 0) BY (name) * 100) > 80
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Instance {{ $labels.node }} Container Memory usage使用率过高"
+          description: "{{ $labels.node }} Container Memory usage使用大于80% (当前值: {{ $value }})"
+      - alert: PodRestart
+        expr: changes(kube_pod_container_status_restarts_total[1m]) 
+        for: 0m 
+        labels:
+          severity: warning
+        annotations:
+          summary: "Instance {{ $labels.node }} Container Restart"
+          description: "{{ $labels.node }} Container 有重启 (当前值: {{ $value }})"
+      - alert: PodDiskUsage
+        expr: (1 - (sum(container_fs_inodes_free) BY (instance) / sum(container_fs_inodes_total) BY (instance))) * 100 > 80 
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Instance {{ $labels.node }} Container Volume usage"
+          description: "{{ $labels.node }} Container Volume 使用大于80% (当前值: {{ $value }})"
+      - alert: ContainerOomKiller
+        expr: (kube_pod_container_status_restarts_total - kube_pod_container_status_restarts_total offset 10m >= 1) and ignoring (reason) min_over_time(kube_pod_container_status_last_terminated_reason{reason="OOMKilled"}[10m]) == 1 
+        for: 0m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Instance {{ $labels.node }} container oom killer"
+          description: "Container {{ $labels.container }} in pod {{ $labels.namespace }}/{{ $labels.pod }} has been OOMKilled {{ $value }} times in the last 10 minutes"
+
+  rabbitmq.rules: |
+    groups:
+    - name: rabbitmq.rules
+      rules:
+      - alert: Memory Watermark
+        expr: rabbitmq_node_mem_used / rabbitmq_node_mem_limit *100 > 60
+        for: 1m
+        labels:
+          serverity: warning
+        annotations:
+          summary: "Instance {{ $labels.node }} rabbitmq memory Watermark is high"
+          description: "{{ $labels.node }} rabbitmq memory used is high (当前值: {{ $value }})"
+
+      - alert: RabbitmqDown
+        expr: rabbitmq_up == 0 
+        for: 1m
+        labels:
+          serverity: critical
+        annotations:
+          summary: "Instance {{ $labels.node }} rabbitmq status is not running"
+          description: "{{ $labels.node }} rabbitmq is down (当前值: {{ $value }})"
+
+      - alert: RabbitmqConnection
+        expr: rabbitmq_connectionsTotal > 10
+        for: 1m
+        labels:
+          serverity: warning
+        annotations:
+          summary: "Instance {{ $labels.node }} rabbitmq connection is high"
+          description: "{{ $labels.node }} rabbitmq connection is high (当前值: {{ $value }})"
+
+      - alert: RabbitmqMessage
+        expr: rabbitmq_queue_messages > 10000
+        for: 1m
+        labels:
+          serverity: warning
+        annotations:
+          summary: "Instance {{ $labels.node }} rabbitmq message is high"
+          description: "{{ $labels.node }} rabbitmq message is high (当前值: {{ $value }})"
+
+  redis.rules: |
+    groups:
+    - name: redis.rules
+      rules:
+      - alert: RedisDown
+        expr: redis_up == 0
+        for: 1m
+        labels:
+          serverity: critical
+        annotations:
+          summary: "Instance {{ $labels.node }} redis status is not running"
+          description: "{{ $labels.node }} redis is down (当前值: {{ $value }})"
+
+      - alert: RedisConnection
+        expr: redis_connected_clients > 1000
+        for: 1m
+        labels:
+          serverity: warning
+        annotations:
+          summary: "Instance {{ $labels.node }} redis connection is high"
+          description: "{{ $labels.node }} redis connection 大于1000 (当前值: {{ $value }})"
+
+      - alert: RedisRejectConnection
+        expr: redis_rejected_connections_total > 0
+        for: 1m
+        labels:
+          serverity: warning
+        annotations:
+          summary: "Instance {{ $labels.node }} redis reject connection"
+          description: "{{ $labels.node }} redis reject connection 大于等于1(当前值: {{ $value }})"
+
+      - alert: RedisMemory
+        expr: redis_memory_used_bytes/1024/1024 > 300 
+        for: 1m
+        labels:
+          serverity: warning
+        annotations:
+          summary: "Instance {{ $labels.node }} redis memory used is high"
+          description: "{{ $labels.node }} redis memory used 大于300M(当前值: {{ $value }})"
+
+  postgresql.rules: |
+    groups:
+    - name: postgrsql.rules
+      rules:
+      - alert: PostgreSqlDown
+        expr: pg_up == 0
+        for: 1m
+        labels:
+          serverity: critical
+        annotations:
+          summary: "Instance {{ $labels.instance }} postgresql status is not running"
+          description: "{{ $labels.instance }} postgresql is down (当前值: {{ $value }})"
+
+      - alert: PostgreSqlConnectionMany
+        expr: sum(pg_stat_activity_count{datname!~"template.*|postgres"}) by(instance)  > pg_settings_max_connections * 0.8
+        for: 1m
+        labels:
+          serverity: warning
+        annotations:
+          summary: "Instance {{ $labels.instance }} postgresql too many connections"
+          description: "{{ $labels.instance }} postgresql has too many connections 大于80% (当前值: {{ $value }})"
+
+      - alert: PostgreSQLSlowQueries
+        expr: avg(rate(pg_stat_activity_max_tx_duration{datname!~"template.*"}[2m])) by (datname) > 2 * 60 
+        for: 1m
+        labels:
+          serverity: warning
+        annotations:
+          summary: "PostgreSQL high number of slow on {{ $labels.instance }} for database {{ $labels.datname }} "
+          description: "PostgreSQL high number of slow queries {{ $labels.instance }} for database {{ $labels.datname }} with a value of {{ $value }} "
+
+      - alert: PostgreSqlDeadLocks
+        expr: increase(pg_stat_database_deadlocks{datname!~"template.*|postgres"}[1m]) > 5 
+        for: 1m
+        labels:
+          serverity: warning
+        annotations:
+          summary: "Instance {{ $labels.instance }} postgresql dead locks"
+          description: "{{ $labels.instance }} postgresql has dead-locks (当前值: {{ $value }})"
