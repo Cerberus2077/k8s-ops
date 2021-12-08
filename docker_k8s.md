@@ -4,6 +4,8 @@
 
 ## k8s配置信息
 
+主机密码：YbB2YZ4omsa231t
+
 | 内网ip             | 版本               | 角色   | 公网ip            |
 | ------------------ | ------------------ | ------ | ----------------- |
 | 192.168.187.145/16 | ubuntu 20.04.3 LTS | master | 122.114.50.242/24 |
@@ -2077,5 +2079,110 @@ cc978e4f4807
             Not After : Dec  5 03:39:03 2031 GMT            
 ```
 
+## 远程连接k8s
+
+本地安装kubectl
+
+```bash
+# cerberus @ cerberusdeMacBook-Pro in ~ [16:56:51]
+$ brew install kubernetes-cli
+Updating Homebrew...
+==> Auto-updated Homebrew!
+Updated 5 taps (homebrew/cask-versions, homebrew/core, homebrew/cask, homebrew/cask-fonts and homebrew/cask-drivers).
+==> New Formulae
+goplus                                        lua-language-server                           pip-audit                                     pocsuite3                                     tsduck
+==> Updated Formulae
+Updated 372 formulae.
+==> Deleted Formulae
+sdhash
+==> New Casks
+camengine              cron                   grammarly-desktop      ludwig                 semeru-jdk11-open      semeru-jdk8-open       soundtoys              spaceid                teamspeak-client       volley
+==> Updated Casks
+Updated 449 casks.
+==> Deleted Casks
+air-connect                                   aja-system-test                               asc-timetables                                chameleon-ssd-optimizer                       chocolat
+
+kubernetes-cli 1.22.3 is already installed but outdated
+==> Downloading https://ghcr.io/v2/homebrew/core/kubernetes-cli/manifests/1.22.4
+######################################################################## 100.0%
+==> Downloading https://ghcr.io/v2/homebrew/core/kubernetes-cli/blobs/sha256:4d0ce9724fe4f4056a78b105d3b9bd4479b70a9925a985698cf67fd67332a178
+==> Downloading from https://pkg-containers.githubusercontent.com/ghcr1/blobs/sha256:4d0ce9724fe4f4056a78b105d3b9bd4479b70a9925a985698cf67fd67332a178?se=2021-12-08T09%3A10%3A00Z&sig=ur%2FDR5sTEoZ947NgfSzSOsStUseX6%2FMkHkm5QqVmBqw%3
+######################################################################## 100.0%
+==> Upgrading kubernetes-cli
+  1.22.3 -> 1.22.4
+
+==> Pouring kubernetes-cli--1.22.4.monterey.bottle.tar.gz
+==> Caveats
+zsh completions have been installed to:
+  /usr/local/share/zsh/site-functions
+==> Summary
+🍺  /usr/local/Cellar/kubernetes-cli/1.22.4: 226 files, 57.2MB
+Removing: /usr/local/Cellar/kubernetes-cli/1.22.3... (226 files, 57.2MB)
+Removing: /Users/cerberus/Library/Caches/Homebrew/kubernetes-cli--1.22.3... (15.2MB)
+==> Upgrading 1 dependent:
+weaveworks/tap/eksctl 0.73.0 -> 0.75.0
+==> Downloading https://github.com/weaveworks/eksctl/releases/download/v0.75.0/eksctl_Darwin_amd64.tar.gz
+######################################################################## 100.0%-=O#-#   #   #
+==> Upgrading weaveworks/tap/eksctl
+  0.73.0 -> 0.75.0
+
+==> Caveats
+zsh completions have been installed to:
+  /usr/local/share/zsh/site-functions
+==> Summary
+🍺  /usr/local/Cellar/eksctl/0.75.0: 5 files, 86.4MB, built in 6 seconds
+Removing: /usr/local/Cellar/eksctl/0.73.0... (5 files, 86.3MB)
+Removing: /Users/cerberus/Library/Caches/Homebrew/eksctl--0.73.0.tar.gz... (20.4MB)
+==> Checking for dependents of upgraded formulae...
+==> No broken dependents found!
+==> Caveats
+==> kubernetes-cli
+zsh completions have been installed to:
+  /usr/local/share/zsh/site-functions
+==> eksctl
+zsh completions have been installed to:
+  /usr/local/share/zsh/site-functions
+(base)
+```
+
+获取集群地址
+
+```bash
+[root@master1 pki]# 
+cd /etc/kubernetes/pki
+[root@master1 pki]#openssl x509 -in apiserver.crt -noout -text | grep DNS
+               DNS:kubernetes, DNS:kubernetes.default, DNS:kubernetes.default.svc, DNS:kubernetes.default.svc.cluster.local, DNS:master, IP Address:10.96.0.1, IP Address:外网ip
+```
+
+修改本地的hosts
+
+```bash
+sudo echo "<服务器外网IP>    kubernetes"    >> /etc/hosts
+```
 
 
+
+下载服务器端的~/.kube/config到本地 将相关cluster context users 字段加入文件中/Users/cerberus/.kube
+
+修改本地~/.kube/config中的server地址为 [http://kubernetes:6443](https://www.oschina.net/action/GoToLink?url=http%3A%2F%2Fkubernetes%3A6443)，如下图
+
+```bash
+$ kubectx
+arn:aws-cn:eks:cn-northwest-1:083057233987:cluster/anywhere-dev
+arn:aws-cn:eks:cn-northwest-1:083057233987:cluster/shopforcelite-dev
+arn:aws-cn:eks:cn-northwest-1:851654390883:cluster/apple-pro
+k8s-westcn
+(base)
+# cerberus @ cerberusdeMacBook-Pro in ~/.kube [17:44:14]
+$ kubectx k8s-westcn
+Switched to context "k8s-westcn".
+(base)
+# cerberus @ cerberusdeMacBook-Pro in ~/.kube [17:44:53]
+$ kubectl get nodes
+NAME     STATUS   ROLES                  AGE   VERSION
+master   Ready    control-plane,master   30h   v1.22.4
+node1    Ready    worker                 30h   v1.22.4
+node2    Ready    worker                 30h   v1.22.4
+```
+
+![image-20211208174740143](./pic/image-20211208174740143.png)
