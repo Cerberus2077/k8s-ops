@@ -660,4 +660,288 @@ node2    Ready    worker                 2d3h   v1.22.4   192.168.0.110    <none
 
 #  pod高级用法：污点和容忍度
 
+## 亲和度  nodeAffinity
+
+查看一下用法
+
+```bash
+# cerberus @ cerberusdeMacBook-Pro in ~/Documents/k8s-ops/yml on git:main x [15:36:11]
+$ kubectl explain pods.spec.affinity
+KIND:     Pod
+VERSION:  v1
+
+RESOURCE: affinity <Object>
+
+DESCRIPTION:
+     If specified, the pod's scheduling constraints
+
+     Affinity is a group of affinity scheduling rules.
+
+FIELDS:
+   nodeAffinity	<Object>
+     Describes node affinity scheduling rules for the pod.
+
+   podAffinity	<Object>
+     Describes pod affinity scheduling rules (e.g. co-locate this pod in the
+     same node, zone, etc. as some other pod(s)).
+
+   podAntiAffinity	<Object>
+     Describes pod anti-affinity scheduling rules (e.g. avoid putting this pod
+     in the same node, zone, etc. as some other pod(s)).
+
+$ kubectl explain pods.spec.affinity.nodeAffinity
+KIND:     Pod
+VERSION:  v1
+
+RESOURCE: nodeAffinity <Object>
+
+DESCRIPTION:
+     Describes node affinity scheduling rules for the pod.
+
+     Node affinity is a group of node affinity scheduling rules.
+
+FIELDS:
+   preferredDuringSchedulingIgnoredDuringExecution	<[]Object>
+     The scheduler will prefer to schedule pods to nodes that satisfy the
+     affinity expressions specified by this field, but it may choose a node that
+     violates one or more of the expressions. The node that is most preferred is
+     the one with the greatest sum of weights, i.e. for each node that meets all
+     of the scheduling requirements (resource request, requiredDuringScheduling
+     affinity expressions, etc.), compute a sum by iterating through the
+     elements of this field and adding "weight" to the sum if the node matches
+     the corresponding matchExpressions; the node(s) with the highest sum are
+     the most preferred.
+     # preferred 有节点尽量满足这个位置定义的亲和性，这不是一个必须条件，软亲和性
+   requiredDuringSchedulingIgnoredDuringExecution	<Object>
+     If the affinity requirements specified by this field are not met at
+     scheduling time, the pod will not be scheduled onto the node. If the
+     affinity requirements specified by this field cease to be met at some point
+     during pod execution (e.g. due to an update), the system may or may not try
+     to eventually evict the pod from its node.
+     #required 必须满足这个位置定义的亲和性，这是硬性条件。硬亲和性
+
+
+
+#继续查看硬亲和性的注解
+
+$ kubectl explain pods.spec.affinity.nodeAffinity.requiredDuringSchedulingIgnoredDuringExecution
+KIND:     Pod
+VERSION:  v1
+
+RESOURCE: requiredDuringSchedulingIgnoredDuringExecution <Object>
+
+DESCRIPTION:
+     If the affinity requirements specified by this field are not met at
+     scheduling time, the pod will not be scheduled onto the node. If the
+     affinity requirements specified by this field cease to be met at some point
+     during pod execution (e.g. due to an update), the system may or may not try
+     to eventually evict the pod from its node.
+
+     A node selector represents the union of the results of one or more label
+     queries over a set of nodes; that is, it represents the OR of the selectors
+     represented by the node selector terms.
+
+FIELDS:
+   nodeSelectorTerms	<[]Object> -required-
+     Required. A list of node selector terms. The terms are ORed.
+
+
+# 继续往下走
+# cerberus @ cerberusdeMacBook-Pro in ~/Documents/k8s-ops/yml on git:main x [15:49:37]
+$ kubectl explain pods.spec.affinity.nodeAffinity.requiredDuringSchedulingIgnoredDuringExecution.nodeSelectorTerms
+KIND:     Pod
+VERSION:  v1
+
+RESOURCE: nodeSelectorTerms <[]Object>
+
+DESCRIPTION:
+     Required. A list of node selector terms. The terms are ORed.
+
+     A null or empty node selector term matches no objects. The requirements of
+     them are ANDed. The TopologySelectorTerm type implements a subset of the
+     NodeSelectorTerm.
+
+FIELDS:
+   matchExpressions	<[]Object>
+     A list of node selector requirements by node's labels.
+
+   matchFields	<[]Object>
+     A list of node selector requirements by node's fields.
+     
+     
+     
+ 
+ 
+ # cerberus @ cerberusdeMacBook-Pro in ~/Documents/k8s-ops/yml on git:main x [15:51:15]
+$ kubectl explain pods.spec.affinity.nodeAffinity.requiredDuringSchedulingIgnoredDuringExecution.nodeSelectorTerms.matchExpressions
+KIND:     Pod
+VERSION:  v1
+
+RESOURCE: matchExpressions <[]Object>
+
+DESCRIPTION:
+     A list of node selector requirements by node's labels.
+
+     A node selector requirement is a selector that contains values, a key, and
+     an operator that relates the key and values.
+
+FIELDS:
+   key	<string> -required-
+     The label key that the selector applies to.
+
+   operator	<string> -required-
+     Represents a key's relationship to a set of values. Valid operators are In,
+     NotIn, Exists, DoesNotExist. Gt, and Lt.
+
+   values	<[]string>
+     An array of string values. If the operator is In or NotIn, the values array
+     must be non-empty. If the operator is Exists or DoesNotExist, the values
+     array must be empty. If the operator is Gt or Lt, the values array must
+     have a single element, which will be interpreted as an integer. This array
+     is replaced during a strategic merge patch.
+
+```
+
+## 硬亲和性实验
+
+```bash
+[root@master1 opt]# scp myapp-v1.tar.gz  node1:/opt/
+myapp-v1.tar.gz                                                                                                                    100%   15MB  67.1MB/s   00:00
+[root@master1 opt]# scp myapp-v1.tar.gz  node2:/opt/
+myapp-v1.tar.gz
+[root@node1 ~]# docker load -i /opt/myapp-v1.tar.gz
+d39d92664027: Loading layer [==================================================>]  4.232MB/4.232MB
+8460a579ab63: Loading layer [==================================================>]  11.61MB/11.61MB
+c1dc81a64903: Loading layer [==================================================>]  3.584kB/3.584kB
+68695a6cfd7d: Loading layer [==================================================>]  4.608kB/4.608kB
+05a9e65e2d53: Loading layer [==================================================>]  16.38kB/16.38kB
+a0d2c4392b06: Loading layer [==================================================>]   7.68kB/7.68kB
+Loaded image: ikubernetes/myapp:v1
+[root@node1 ~]# 登出
+Connection to node1 closed.
+[root@master1 opt]# ssh node2
+Last login: Thu Dec  9 15:05:27 2021 from 183.195.14.17
+[root@node2 ~]# docker load -i /opt/myapp-v1.tar.gz
+d39d92664027: Loading layer [==================================================>]  4.232MB/4.232MB
+8460a579ab63: Loading layer [==================================================>]  11.61MB/11.61MB
+c1dc81a64903: Loading layer [==================================================>]  3.584kB/3.584kB
+68695a6cfd7d: Loading layer [==================================================>]  4.608kB/4.608kB
+05a9e65e2d53: Loading layer [==================================================>]  16.38kB/16.38kB
+a0d2c4392b06: Loading layer [==================================================>]   7.68kB/7.68kB
+Loaded image: ikubernetes/myapp:v1
+
+```
+
+pod-nodeaffinity-demo.yaml
+
+```yaml
+apiVersion: v1
+kind: Pod
+metadata:
+        name: pod-node-affinity-demo
+        namespace: default
+        labels:
+            app: myapp
+            tier: frontend
+spec:
+    containers:
+    - name: myapp
+      image: ikubernetes/myapp:v1
+      imagePullPolicy: IfNotPresent
+    affinity:
+        nodeAffinity:
+            requiredDuringSchedulingIgnoredDuringExecution:
+                   nodeSelectorTerms:
+                   - matchExpressions:
+                     - key: zone
+                       operator: In
+                       values:
+                       - foo
+                       - bar
+# 这个yaml 会找zone 等于 for 或者bar的标签
+
+```
+
+此时节点标签如下,没有zone=foo 或者 zone=bar的标签
+
+```bash
+# cerberus @ cerberusdeMacBook-Pro in ~ [16:08:50]
+$ kubectl get nodes  --show-labels
+NAME     STATUS   ROLES                  AGE    VERSION   LABELS
+master   Ready    control-plane,master   2d4h   v1.22.4   beta.kubernetes.io/arch=amd64,beta.kubernetes.io/os=linux,kubernetes.io/arch=amd64,kubernetes.io/hostname=master,kubernetes.io/os=linux,node-role.kubernetes.io/control-plane=,node-role.kubernetes.io/master=,node.kubernetes.io/exclude-from-external-load-balancers=
+node1    Ready    worker                 2d4h   v1.22.4   beta.kubernetes.io/arch=amd64,beta.kubernetes.io/os=linux,kubernetes.io/arch=amd64,kubernetes.io/hostname=node1,kubernetes.io/os=linux,node-role.kubernetes.io/worker=worker
+node2    Ready    worker                 2d4h   v1.22.4   beta.kubernetes.io/arch=amd64,beta.kubernetes.io/os=linux,kubernetes.io/arch=amd64,kubernetes.io/hostname=node2,kubernetes.io/os=linux,node-role.kubernetes.io/worker=worker
+(base)
+```
+
+ ![image-20211209161209985](./pic/image-20211209161209985.png)
+
+查看失败原因
+
+```bash
+# cerberus @ cerberusdeMacBook-Pro in ~ [16:11:42]
+$ kubectl describe pods pod-node-affinity-demo
+Name:         pod-node-affinity-demo
+Namespace:    default
+Priority:     0
+Node:         <none>
+Labels:       app=myapp
+              tier=frontend
+Annotations:  <none>
+Status:       Pending
+IP:
+IPs:          <none>
+Containers:
+  myapp:
+    Image:        ikubernetes/myapp:v1
+    Port:         <none>
+    Host Port:    <none>
+    Environment:  <none>
+    Mounts:
+      /var/run/secrets/kubernetes.io/serviceaccount from kube-api-access-d82f5 (ro)
+Conditions:
+  Type           Status
+  PodScheduled   False
+Volumes:
+  kube-api-access-d82f5:
+    Type:                    Projected (a volume that contains injected data from multiple sources)
+    TokenExpirationSeconds:  3607
+    ConfigMapName:           kube-root-ca.crt
+    ConfigMapOptional:       <nil>
+    DownwardAPI:             true
+QoS Class:                   BestEffort
+Node-Selectors:              <none>
+Tolerations:                 node.kubernetes.io/not-ready:NoExecute op=Exists for 300s
+                             node.kubernetes.io/unreachable:NoExecute op=Exists for 300s
+Events:
+  Type     Reason            Age   From               Message
+  ----     ------            ----  ----               -------
+  Warning  FailedScheduling  97s   default-scheduler  0/3 nodes are available: 1 node(s) had taint {node-role.kubernetes.io/master: }, that the pod didn't tolerate, 2 node(s) didn't match Pod's node affinity/selector.
+  Warning  FailedScheduling  24s   default-scheduler  0/3 nodes are available: 1 node(s) had taint {node-role.kubernetes.io/master: }, that the pod didn't tolerate, 2 node(s) didn't match Pod's node affinity/selector.
+```
+
+给pod打上标签即可
+
+```bash
+cerberus @ cerberusdeMacBook-Pro in ~ [16:12:56]
+$ kubectl  label nodes node1 zone=bar
+node/node1 labeled
+(base)
+# cerberus @ cerberusdeMacBook-Pro in ~ [16:17:36]
+$ kubectl apply -f /Users/cerberus/Documents/k8s-ops/yml/chpt9/pod-nodeaffinity-demo.yaml
+pod/pod-node-affinity-demo unchanged
+(base)
+# cerberus @ cerberusdeMacBook-Pro in ~ [16:17:45]
+$ kubectl get pods
+NAME                        READY   STATUS    RESTARTS   AGE
+my-nginx-85b7d5dfb5-6dghq   1/1     Running   0          18h
+my-nginx-85b7d5dfb5-9jx22   1/1     Running   0          17h
+my-nginx-85b7d5dfb5-pmhfg   1/1     Running   0          18h
+my-nginx-85b7d5dfb5-xkgkt   1/1     Running   0          17h
+pod-node-affinity-demo      1/1     Running   0          6m31s
+(base)
+```
+
+
+
 # pod高级用法：pod状态和重启策略
