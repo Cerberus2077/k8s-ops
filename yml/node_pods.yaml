@@ -1,0 +1,25 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: demo-pod
+  namespace: default
+  labels:
+    app: myapp
+    env: dev
+spec:
+  nodeName: node2  #指定运行的pod
+  containers:
+  - name:  tomcat-pod-java
+    ports:
+    - containerPort: 8080
+    image: tomcat:8.5-jre8-alpine
+    imagePullPolicy: IfNotPresent
+  - name: busybox
+    image: busybox:latest
+    command:
+    - "/bin/sh"
+    - "-c"
+    - "sleep 3600"
+
+
+
