@@ -658,7 +658,7 @@ node2    Ready    worker                 2d3h   v1.22.4   192.168.0.110    <none
 
 
 
-#  pod高级用法：污点和容忍度
+#  pod高级用法：亲和性和反亲和性
 
 ## 亲和度  nodeAffinity
 
@@ -944,4 +944,485 @@ pod-node-affinity-demo      1/1     Running   0          6m31s
 
 
 
-# pod高级用法：pod状态和重启策略
+# pod高级用法：pod生命周期和健康监测
+
+## 污点、容忍度
+
+污点给了节点选择的主动权，我们给节点打上一个污点，不能容忍的pod就不会运行上来，污点就是定义在节点上的键值属性数据，可以决定拒绝哪些pod
+
+taints 是键值数据，用在节点上，定义污点
+
+tolerations是键值数据，用在pod上，定义容忍度，能容忍哪些污点
+
+查看node1节点的yaml格式配置
+
+$ kubectl get nodes node1 -o yaml  #没有污点
+
+```yaml
+apiVersion: v1
+kind: Node
+metadata:
+  annotations:
+    kubeadm.alpha.kubernetes.io/cri-socket: /var/run/dockershim.sock
+    node.alpha.kubernetes.io/ttl: "0"
+    projectcalico.org/IPv4Address: 192.168.247.34/16
+    projectcalico.org/IPv4IPIPTunnelAddr: 192.168.166.128
+    volumes.kubernetes.io/controller-managed-attach-detach: "true"
+  creationTimestamp: "2021-12-07T03:39:50Z"
+  labels:
+    beta.kubernetes.io/arch: amd64
+    beta.kubernetes.io/os: linux
+    kubernetes.io/arch: amd64
+    kubernetes.io/hostname: node1
+    kubernetes.io/os: linux
+    node-role.kubernetes.io/worker: worker
+    zone: bar
+  name: node1
+  resourceVersion: "291968"
+  uid: 551cd0c3-b559-41f9-b53a-8d20241ba096
+spec:
+  podCIDR: 192.168.1.0/24
+  podCIDRs:
+  - 192.168.1.0/24
+status:
+  addresses:
+  - address: 192.168.247.34
+    type: InternalIP
+  - address: node1
+    type: Hostname
+  allocatable:
+    cpu: "2"
+    ephemeral-storage: "28415217208"
+    hugepages-1Gi: "0"
+    hugepages-2Mi: "0"
+    memory: 3779176Ki
+    pods: "110"
+  capacity:
+    cpu: "2"
+    ephemeral-storage: 30832484Ki
+    hugepages-1Gi: "0"
+    hugepages-2Mi: "0"
+    memory: 3881576Ki
+    pods: "110"
+  conditions:
+  - lastHeartbeatTime: "2021-12-07T10:33:26Z"
+    lastTransitionTime: "2021-12-07T10:33:26Z"
+    message: Calico is running on this node
+    reason: CalicoIsUp
+    status: "False"
+    type: NetworkUnavailable
+  - lastHeartbeatTime: "2021-12-09T13:15:20Z"
+    lastTransitionTime: "2021-12-07T03:39:50Z"
+    message: kubelet has sufficient memory available
+    reason: KubeletHasSufficientMemory
+    status: "False"
+    type: MemoryPressure
+  - lastHeartbeatTime: "2021-12-09T13:15:20Z"
+    lastTransitionTime: "2021-12-07T03:39:50Z"
+    message: kubelet has no disk pressure
+    reason: KubeletHasNoDiskPressure
+    status: "False"
+    type: DiskPressure
+  - lastHeartbeatTime: "2021-12-09T13:15:20Z"
+    lastTransitionTime: "2021-12-07T03:39:50Z"
+    message: kubelet has sufficient PID available
+    reason: KubeletHasSufficientPID
+    status: "False"
+    type: PIDPressure
+  - lastHeartbeatTime: "2021-12-09T13:15:20Z"
+    lastTransitionTime: "2021-12-07T10:33:34Z"
+    message: kubelet is posting ready status
+    reason: KubeletReady
+    status: "True"
+    type: Ready
+  daemonEndpoints:
+    kubeletEndpoint:
+      Port: 10250
+  images:
+  - names:
+    - calico/node@sha256:e207db848adb688ae3edac439c650b0ec44c0675efc3b735721f7541e0320100
+    - calico/node:v3.18.0
+    sizeBytes: 172152587
+  - names:
+    - nginx@sha256:9522864dd661dcadfd9958f9e0de192a1fdda2c162a35668ab6ac42b465f0603
+    - nginx:latest
+    sizeBytes: 141490839
+  - names:
+    - nginx:1.9.1
+    sizeBytes: 132835913
+  - names:
+    - calico/cni@sha256:9d692b3ce9003469f5d50de91dc66ee37d76d78715ed5c1f4884b5d901411489
+    - calico/cni:v3.18.0
+    sizeBytes: 131137949
+  - names:
+    - tomcat:8.5-jre8-alpine
+    sizeBytes: 106452221
+  - names:
+    - registry.aliyuncs.com/google_containers/kube-proxy@sha256:7cd096e334df4bdad417fe91616d34d9f0a134af9aed19db12083e39d60e76a5
+    - registry.cn-hangzhou.aliyuncs.com/google_containers/kube-proxy@sha256:7cd096e334df4bdad417fe91616d34d9f0a134af9aed19db12083e39d60e76a5
+    - registry.aliyuncs.com/google_containers/kube-proxy:v1.22.4
+    - registry.cn-hangzhou.aliyuncs.com/google_containers/kube-proxy:v1.22.4
+    sizeBytes: 103649165
+  - names:
+    - kubernetesui/dashboard:v2.0.0-beta8
+    sizeBytes: 90835427
+  - names:
+    - calico/kube-controllers@sha256:12515fb6e2f35a2ce86133cb2f17fa8039381c9ac031c2b300af398f8589651f
+    - calico/kube-controllers:v3.18.0
+    sizeBytes: 53382916
+  - names:
+    - registry.aliyuncs.com/google_containers/coredns@sha256:6e5a02c21641597998b4be7cb5eb1e7b02c0d8d23cce4dd09f4682d463798890
+    - registry.cn-hangzhou.aliyuncs.com/google_containers/coredns@sha256:6e5a02c21641597998b4be7cb5eb1e7b02c0d8d23cce4dd09f4682d463798890
+    - registry.aliyuncs.com/google_containers/coredns:v1.8.4
+    - registry.cn-hangzhou.aliyuncs.com/google_containers/coredns:v1.8.4
+    sizeBytes: 47554275
+  - names:
+    - kubernetesui/metrics-scraper:v1.0.1
+    sizeBytes: 40101504
+  - names:
+    - calico/pod2daemon-flexvol@sha256:63939cfbd430345c6add6548fc7a22e3082d0738f455ae747dd6264c834bcd4e
+    - calico/pod2daemon-flexvol:v3.18.0
+    sizeBytes: 21666928
+  - names:
+    - ikubernetes/myapp:v1
+    sizeBytes: 15504557
+  - names:
+    - busybox@sha256:b5cfd4befc119a590ca1a81d6bb0fa1fb19f1fbebd0397f25fae164abe1e8a6a
+    - busybox:latest
+    sizeBytes: 1239820
+  - names:
+    - busybox:1.28
+    sizeBytes: 1146369
+  - names:
+    - registry.aliyuncs.com/google_containers/pause@sha256:1ff6c18fbef2045af6b9c16bf034cc421a29027b800e4f9b68ae9b1cb3e9ae07
+    - registry.cn-hangzhou.aliyuncs.com/google_containers/pause@sha256:1ff6c18fbef2045af6b9c16bf034cc421a29027b800e4f9b68ae9b1cb3e9ae07
+    - registry.aliyuncs.com/google_containers/pause:3.5
+    - registry.cn-hangzhou.aliyuncs.com/google_containers/pause:3.5
+    sizeBytes: 682696
+  nodeInfo:
+    architecture: amd64
+    bootID: 5a65ffc5-598d-4940-814a-796da25ce990
+    containerRuntimeVersion: docker://20.10.11
+    kernelVersion: 3.10.0-693.21.1.el7.x86_64
+    kubeProxyVersion: v1.22.4
+    kubeletVersion: v1.22.4
+    machineID: 1a8794da328f494cab266e8cf2fc3c84
+    operatingSystem: linux
+    osImage: CentOS Linux 7 (Core)
+    systemUUID: DBD45810-BDC0-4989-AD6F-6555891090D8
+```
+
+查看master是否有污点
+
+$ kubectl get nodes master -o yaml   此处有污点   **Taints:             node-role.kubernetes.io/master:NoSchedule**
+
+```bash
+apiVersion: v1
+kind: Node
+metadata:
+  annotations:
+    kubeadm.alpha.kubernetes.io/cri-socket: /var/run/dockershim.sock
+    node.alpha.kubernetes.io/ttl: "0"
+    projectcalico.org/IPv4Address: 192.168.187.145/16
+    projectcalico.org/IPv4IPIPTunnelAddr: 192.168.219.64
+    volumes.kubernetes.io/controller-managed-attach-detach: "true"
+  creationTimestamp: "2021-12-07T03:39:15Z"
+  labels:
+    beta.kubernetes.io/arch: amd64
+    beta.kubernetes.io/os: linux
+    kubernetes.io/arch: amd64
+    kubernetes.io/hostname: master
+    kubernetes.io/os: linux
+    node-role.kubernetes.io/control-plane: ""
+    node-role.kubernetes.io/master: ""
+    node.kubernetes.io/exclude-from-external-load-balancers: ""
+  name: master
+  resourceVersion: "292369"
+  uid: f57fc697-7ba3-4149-b302-fe267397e878
+spec:
+  podCIDR: 192.168.0.0/24
+  podCIDRs:
+  - 192.168.0.0/24
+  taints:
+  - effect: NoSchedule
+    key: node-role.kubernetes.io/master
+status:
+  addresses:
+  - address: 122.114.50.242
+    type: InternalIP
+  - address: master
+    type: Hostname
+  allocatable:
+    cpu: "2"
+    ephemeral-storage: "28415217208"
+    hugepages-1Gi: "0"
+    hugepages-2Mi: "0"
+    memory: 3779176Ki
+    pods: "110"
+  capacity:
+    cpu: "2"
+    ephemeral-storage: 30832484Ki
+    hugepages-1Gi: "0"
+    hugepages-2Mi: "0"
+    memory: 3881576Ki
+    pods: "110"
+  conditions:
+  - lastHeartbeatTime: "2021-12-07T10:33:25Z"
+    lastTransitionTime: "2021-12-07T10:33:25Z"
+    message: Calico is running on this node
+    reason: CalicoIsUp
+    status: "False"
+    type: NetworkUnavailable
+  - lastHeartbeatTime: "2021-12-09T13:20:08Z"
+    lastTransitionTime: "2021-12-07T03:39:10Z"
+    message: kubelet has sufficient memory available
+    reason: KubeletHasSufficientMemory
+    status: "False"
+    type: MemoryPressure
+  - lastHeartbeatTime: "2021-12-09T13:20:08Z"
+    lastTransitionTime: "2021-12-07T03:39:10Z"
+    message: kubelet has no disk pressure
+    reason: KubeletHasNoDiskPressure
+    status: "False"
+    type: DiskPressure
+  - lastHeartbeatTime: "2021-12-09T13:20:08Z"
+    lastTransitionTime: "2021-12-07T03:39:10Z"
+    message: kubelet has sufficient PID available
+    reason: KubeletHasSufficientPID
+    status: "False"
+    type: PIDPressure
+  - lastHeartbeatTime: "2021-12-09T13:20:08Z"
+    lastTransitionTime: "2021-12-07T10:33:34Z"
+    message: kubelet is posting ready status
+    reason: KubeletReady
+    status: "True"
+    type: Ready
+  daemonEndpoints:
+    kubeletEndpoint:
+      Port: 10250
+  images:
+  - names:
+    - registry.aliyuncs.com/google_containers/etcd@sha256:9ce33ba33d8e738a5b85ed50b5080ac746deceed4a7496c550927a7a19ca3b6d
+    - registry.cn-hangzhou.aliyuncs.com/google_containers/etcd@sha256:9ce33ba33d8e738a5b85ed50b5080ac746deceed4a7496c550927a7a19ca3b6d
+    - registry.aliyuncs.com/google_containers/etcd:3.5.0-0
+    - registry.cn-hangzhou.aliyuncs.com/google_containers/etcd:3.5.0-0
+    sizeBytes: 294536887
+  - names:
+    - calico/node@sha256:e207db848adb688ae3edac439c650b0ec44c0675efc3b735721f7541e0320100
+    - calico/node:v3.18.0
+    sizeBytes: 172152587
+  - names:
+    - calico/cni@sha256:9d692b3ce9003469f5d50de91dc66ee37d76d78715ed5c1f4884b5d901411489
+    - calico/cni:v3.18.0
+    sizeBytes: 131137949
+  - names:
+    - registry.aliyuncs.com/google_containers/kube-apiserver@sha256:c52183c0c9cd24f0349d36607c95c9d861df569c568877ddf5755e8e8364c110
+    - registry.cn-hangzhou.aliyuncs.com/google_containers/kube-apiserver@sha256:c52183c0c9cd24f0349d36607c95c9d861df569c568877ddf5755e8e8364c110
+    - registry.aliyuncs.com/google_containers/kube-apiserver:v1.22.4
+    - registry.cn-hangzhou.aliyuncs.com/google_containers/kube-apiserver:v1.22.4
+    sizeBytes: 128319037
+  - names:
+    - registry.aliyuncs.com/google_containers/kube-controller-manager@sha256:fc31b9bd0c4fae88bb10f87b17d7c81f18278fd99f6e46832c22a6ad4f2a617c
+    - registry.cn-hangzhou.aliyuncs.com/google_containers/kube-controller-manager@sha256:fc31b9bd0c4fae88bb10f87b17d7c81f18278fd99f6e46832c22a6ad4f2a617c
+    - registry.aliyuncs.com/google_containers/kube-controller-manager:v1.22.4
+    - registry.cn-hangzhou.aliyuncs.com/google_containers/kube-controller-manager:v1.22.4
+    sizeBytes: 122011513
+  - names:
+    - registry.aliyuncs.com/google_containers/kube-proxy@sha256:7cd096e334df4bdad417fe91616d34d9f0a134af9aed19db12083e39d60e76a5
+    - registry.cn-hangzhou.aliyuncs.com/google_containers/kube-proxy@sha256:7cd096e334df4bdad417fe91616d34d9f0a134af9aed19db12083e39d60e76a5
+    - registry.aliyuncs.com/google_containers/kube-proxy:v1.22.4
+    - registry.cn-hangzhou.aliyuncs.com/google_containers/kube-proxy:v1.22.4
+    sizeBytes: 103649165
+  - names:
+    - registry.aliyuncs.com/google_containers/kube-scheduler@sha256:35e7fb6d7e570caa10f9545c46f7c5d852c7c23781efa933d97d1c12dbcd877b
+    - registry.cn-hangzhou.aliyuncs.com/google_containers/kube-scheduler@sha256:35e7fb6d7e570caa10f9545c46f7c5d852c7c23781efa933d97d1c12dbcd877b
+    - registry.aliyuncs.com/google_containers/kube-scheduler:v1.22.4
+    - registry.cn-hangzhou.aliyuncs.com/google_containers/kube-scheduler:v1.22.4
+    sizeBytes: 52682589
+  - names:
+    - registry.aliyuncs.com/google_containers/coredns@sha256:6e5a02c21641597998b4be7cb5eb1e7b02c0d8d23cce4dd09f4682d463798890
+    - registry.cn-hangzhou.aliyuncs.com/google_containers/coredns@sha256:6e5a02c21641597998b4be7cb5eb1e7b02c0d8d23cce4dd09f4682d463798890
+    - registry.aliyuncs.com/google_containers/coredns:v1.8.4
+    - registry.cn-hangzhou.aliyuncs.com/google_containers/coredns:v1.8.4
+    sizeBytes: 47554275
+  - names:
+    - calico/pod2daemon-flexvol@sha256:63939cfbd430345c6add6548fc7a22e3082d0738f455ae747dd6264c834bcd4e
+    - calico/pod2daemon-flexvol:v3.18.0
+    sizeBytes: 21666928
+  - names:
+    - registry.aliyuncs.com/google_containers/pause@sha256:1ff6c18fbef2045af6b9c16bf034cc421a29027b800e4f9b68ae9b1cb3e9ae07
+    - registry.cn-hangzhou.aliyuncs.com/google_containers/pause@sha256:1ff6c18fbef2045af6b9c16bf034cc421a29027b800e4f9b68ae9b1cb3e9ae07
+    - registry.aliyuncs.com/google_containers/pause:3.5
+    - registry.cn-hangzhou.aliyuncs.com/google_containers/pause:3.5
+    sizeBytes: 682696
+  nodeInfo:
+    architecture: amd64
+    bootID: 955b32a0-b4f8-4019-a98c-e72ab4b0bfdb
+    containerRuntimeVersion: docker://20.10.11
+    kernelVersion: 3.10.0-693.21.1.el7.x86_64
+    kubeProxyVersion: v1.22.4
+    kubeletVersion: v1.22.4
+    machineID: 1a8794da328f494cab266e8cf2fc3c84
+    operatingSystem: linux
+    osImage: CentOS Linux 7 (Core)
+    systemUUID: F4CA4B89-1DF3-48C6-AFB3-E242184757BA
+```
+
+或者使用describe 命令
+
+```bash
+# cerberus @ cerberusdeMacBook-Pro in ~/Documents/k8s-ops/yml/chpt9 on git:main x [21:29:31] C:1
+$ kubectl describe nodes master
+Name:               master
+Roles:              control-plane,master
+Labels:             beta.kubernetes.io/arch=amd64
+                    beta.kubernetes.io/os=linux
+                    kubernetes.io/arch=amd64
+                    kubernetes.io/hostname=master
+                    kubernetes.io/os=linux
+                    node-role.kubernetes.io/control-plane=
+                    node-role.kubernetes.io/master=
+                    node.kubernetes.io/exclude-from-external-load-balancers=
+Annotations:        kubeadm.alpha.kubernetes.io/cri-socket: /var/run/dockershim.sock
+                    node.alpha.kubernetes.io/ttl: 0
+                    projectcalico.org/IPv4Address: 192.168.187.145/16
+                    projectcalico.org/IPv4IPIPTunnelAddr: 192.168.219.64
+                    volumes.kubernetes.io/controller-managed-attach-detach: true
+CreationTimestamp:  Tue, 07 Dec 2021 11:39:15 +0800
+Taints:             node-role.kubernetes.io/master:NoSchedule
+Unschedulable:      false
+Lease:
+  HolderIdentity:  master
+  AcquireTime:     <unset>
+  RenewTime:       Thu, 09 Dec 2021 21:29:27 +0800
+Conditions:
+  Type                 Status  LastHeartbeatTime                 LastTransitionTime                Reason                       Message
+  ----                 ------  -----------------                 ------------------                ------                       -------
+  NetworkUnavailable   False   Tue, 07 Dec 2021 18:33:25 +0800   Tue, 07 Dec 2021 18:33:25 +0800   CalicoIsUp                   Calico is running on this node
+  MemoryPressure       False   Thu, 09 Dec 2021 21:25:10 +0800   Tue, 07 Dec 2021 11:39:10 +0800   KubeletHasSufficientMemory   kubelet has sufficient memory available
+  DiskPressure         False   Thu, 09 Dec 2021 21:25:10 +0800   Tue, 07 Dec 2021 11:39:10 +0800   KubeletHasNoDiskPressure     kubelet has no disk pressure
+  PIDPressure          False   Thu, 09 Dec 2021 21:25:10 +0800   Tue, 07 Dec 2021 11:39:10 +0800   KubeletHasSufficientPID      kubelet has sufficient PID available
+  Ready                True    Thu, 09 Dec 2021 21:25:10 +0800   Tue, 07 Dec 2021 18:33:34 +0800   KubeletReady                 kubelet is posting ready status
+Addresses:
+  InternalIP:  122.114.50.242
+  Hostname:    master
+Capacity:
+  cpu:                2
+  ephemeral-storage:  30832484Ki
+  hugepages-1Gi:      0
+  hugepages-2Mi:      0
+  memory:             3881576Ki
+  pods:               110
+Allocatable:
+  cpu:                2
+  ephemeral-storage:  28415217208
+  hugepages-1Gi:      0
+  hugepages-2Mi:      0
+  memory:             3779176Ki
+  pods:               110
+System Info:
+  Machine ID:                 1a8794da328f494cab266e8cf2fc3c84
+  System UUID:                F4CA4B89-1DF3-48C6-AFB3-E242184757BA
+  Boot ID:                    955b32a0-b4f8-4019-a98c-e72ab4b0bfdb
+  Kernel Version:             3.10.0-693.21.1.el7.x86_64
+  OS Image:                   CentOS Linux 7 (Core)
+  Operating System:           linux
+  Architecture:               amd64
+  Container Runtime Version:  docker://20.10.11
+  Kubelet Version:            v1.22.4
+  Kube-Proxy Version:         v1.22.4
+PodCIDR:                      192.168.0.0/24
+PodCIDRs:                     192.168.0.0/24
+Non-terminated Pods:          (6 in total)
+  Namespace                   Name                              CPU Requests  CPU Limits  Memory Requests  Memory Limits  Age
+  ---------                   ----                              ------------  ----------  ---------------  -------------  ---
+  kube-system                 calico-node-xs9hf                 250m (12%)    0 (0%)      0 (0%)           0 (0%)         2d9h
+  kube-system                 etcd-master                       100m (5%)     0 (0%)      100Mi (2%)       0 (0%)         2d9h
+  kube-system                 kube-apiserver-master             250m (12%)    0 (0%)      0 (0%)           0 (0%)         2d9h
+  kube-system                 kube-controller-manager-master    200m (10%)    0 (0%)      0 (0%)           0 (0%)         2d9h
+  kube-system                 kube-proxy-hvvzd                  0 (0%)        0 (0%)      0 (0%)           0 (0%)         2d9h
+  kube-system                 kube-scheduler-master             100m (5%)     0 (0%)      0 (0%)           0 (0%)         2d9h
+Allocated resources:
+  (Total limits may be over 100 percent, i.e., overcommitted.)
+  Resource           Requests    Limits
+  --------           --------    ------
+  cpu                900m (45%)  0 (0%)
+  memory             100Mi (2%)  0 (0%)
+  ephemeral-storage  0 (0%)      0 (0%)
+  hugepages-1Gi      0 (0%)      0 (0%)
+  hugepages-2Mi      0 (0%)      0 (0%)
+Events:              <none>
+```
+
+默认创建node的时候是不会定义容忍度的
+
+### 创建污点
+
+查看帮助文档
+
+```bash
+# cerberus @ cerberusdeMacBook-Pro in ~/Documents/k8s-ops/yml/chpt9 on git:main x [21:34:16]
+$ kubectl explain node.spec.taints
+KIND:     Node
+VERSION:  v1
+
+RESOURCE: taints <[]Object>
+
+DESCRIPTION:
+     If specified, the node's taints.
+
+     The node this Taint is attached to has the "effect" on any pod that does
+     not tolerate the Taint.
+
+FIELDS:
+   effect	<string> -required-
+     Required. The effect of the taint on pods that do not tolerate the taint.
+     Valid effects are NoSchedule, PreferNoSchedule and NoExecute.
+     # 排斥等级 
+     # NoSchedule  仅影响调度过程，当pod能够容忍这个节点的污点，就可以调度到当前节点，如果后面新家了一个污点，使得之前调度过来的pod不能容忍了，那么对现存的pod是不产生影响的 即 不追诉过往
+     # NoExecute 既影响调度过程，又影响现存pod
+     # PreferNoSchedule 最好不调度，如果硬要调度也可以
+
+   key	<string> -required-
+     Required. The taint key to be applied to a node.
+
+   timeAdded	<string>
+     TimeAdded represents the time at which the taint was added. It is only
+     written for NoExecute taints.
+
+   value	<string>
+     The taint value corresponding to the taint key.
+
+(base)
+# cerberus @ cerberusdeMacBook-Pro in ~/Documents/k8s-ops/yml/chpt9 on git:main x [21:34:27]
+# cerberus @ cerberusdeMacBook-Pro in ~/Documents/k8s-ops/yml/chpt9 on git:main x [21:34:27]
+$ kubectl explain node.spec.taints.effect
+KIND:     Node
+VERSION:  v1
+
+FIELD:    effect <string>
+
+DESCRIPTION:
+     Required. The effect of the taint on pods that do not tolerate the taint.
+     Valid effects are NoSchedule, PreferNoSchedule and NoExecute.
+(base)
+$ kubectl explain node.spec.taints.key
+KIND:     Node
+VERSION:  v1
+
+FIELD:    key <string>
+
+DESCRIPTION:
+     Required. The taint key to be applied to a node.
+(base)
+# cerberus @ cerberusdeMacBook-Pro in ~/Documents/k8s-ops/yml/chpt9 on git:main x [21:35:36]
+```
+
+
+
+## pod状态和重启策略
+
+## pod生命周期
+
+## pod健康监测
+
