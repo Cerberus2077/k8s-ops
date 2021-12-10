@@ -1,0 +1,22 @@
+apiVersion: v1  # api版本
+kind: Pod   # 资源类型
+metadata:   # 元数据
+  name: myapp-deploy  # 名字
+  namespace: default  # 命名空间
+  labels:    # 标签
+    app: myapp
+    release: dev
+spec:
+      containers:
+      - name: myapp  # 容器名
+        image: ikubernetes/myapp:v1  # 镜像
+        imagePullPolicy: IfNotPresent  # 镜像拉取规则        
+        ports:
+        - name: http
+          containerPort: 80  # 容器端口
+      tolerations:  # 容忍度
+      - key: "node-type"  # key值
+        operator: "Equal" # 运算符
+        value: "prod" # 标签
+        effect: "NoSchedule" # 级别
+# 此pod 能够容热 key是node-type 等于 prod 策略级别是 NoSchedule 

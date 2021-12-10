@@ -1738,7 +1738,7 @@ spec:
 
 ```
 
-查看该yaml文件定义的对应pod
+查看该yaml文件定义的对应pod，可以看到是调度到node2上面的
 
 ```
 # luca @ luca in ~ [10:48:10] C:1
@@ -1751,11 +1751,476 @@ taint-pod   1/1     Running   0          59s   192.168.104.21   node2   <none>  
 
 ```
 
+我们删除这个pod ，把node2也打上污点，看看这个pod是怎么调度的.
+
+```bash
+# luca @ luca in ~ [10:59:14]
+$ kubectl taint node node2 node-type=dev:NoExecute --overwrite
+node/node2 tainted
+
+# luca @ luca in ~ [10:59:26]
+$ kubectl apply -f /Users/luca/Documents/k8s-ops/yml/chpt10/pod-taint-no-tolerations.yaml
+pod/taint-pod created
+
+# luca @ luca in ~ [10:59:33]
+$ kubectl get pods   -o wide
+NAME        READY   STATUS    RESTARTS   AGE   IP       NODE     NOMINATED NODE   READINESS GATES
+taint-pod   0/1     Pending   0          12s   <none>   <none>   <none>           <none>
+
+```
+
+可以看到一直是pending状态，无法调度。
+
+查看当前node的污点
+
+```bash
+# luca @ luca in ~ [11:21:58]
+$ kubectl describe nodes node1|grep Taints
+Taints:             node-type=prod:NoSchedule
+
+# luca @ luca in ~ [11:22:23]
+$ kubectl describe nodes node2|grep Taints
+Taints:             node-type=dev:NoExecute
+```
 
 
-## pod状态和重启策略
 
-## pod生命周期
+创建一个新的yaml，定义容忍度
 
-## pod健康监测
+```yaml
+apiVersion: v1  # api版本
+kind: Pod   # 资源类型
+metadata:   # 元数据
+  name: myapp-deploy  # 名字
+  namespace: default  # 命名空间
+  labels:    # 标签
+    app: myapp
+    release: dev
+spec:
+      containers:
+      - name: myapp  # 容器名
+        image: ikubernetes/myapp:v1  # 镜像
+        imagePullPolicy: IfNotPresent  # 镜像拉取规则        
+        ports:
+        - name: http
+          containerPort: 80  # 容器端口
+      tolerations:  # 容忍度
+      - key: "node-type"  # key值
+        operator: "Equal" # 运算符
+        value: "prod" # 标签
+        effect: "NoSchedule" # 级别
+# 此pod 能够容热 key是node-type 等于 prod 策略级别是 NoSchedule 
+```
 
+```bash
+
+# luca @ luca in ~/Documents/k8s-ops on git:main o [10:53:50] 
+$ kubectl apply -f /Users/luca/Documents/k8s-ops/yml/chpt10/pod-taint-yes-tolerations.yaml 
+pod/myapp-deploy created
+# luca @ luca in ~ [11:31:12]
+$  kubectl get pods
+NAME           READY   STATUS    RESTARTS   AGE
+myapp-deploy   1/1     Running   0          5s
+taint-pod      0/1     Pending   0          31m
+
+```
+
+可以看到pod 已经起来了
+
+定一个pod资源使用noexcte 级别
+
+```yaml
+apiVersion: v1  # api版本
+kind: Pod   # 资源类型
+metadata:   # 元数据
+  name: myapp-dev # 名字
+  namespace: default  # 命名空间
+  labels:    # 标签
+    app: myapp
+    release: dev
+spec:
+      containers:
+      - name: myapp  # 容器名
+        image: ikubernetes/myapp:v1  # 镜像
+        imagePullPolicy: IfNotPresent  # 镜像拉取规则        
+        ports:
+        - name: http
+          containerPort: 80  # 容器端口
+
+      tolerations:  # 容忍度
+      - key: "node-type"  # key值
+        operator: "Equal" # 运算符
+        value: "dev" # 标签
+        effect: "NoExecute" # 级别
+        tolerationSeconds: 36 # 36秒后驱逐
+```
+
+应用pod资源定义文件，查看结果
+
+```
+# luca @ luca in ~/Documents/k8s-ops on git:main x [11:52:24] 
+$ kubectl apply -f /Users/luca/Documents/k8s-ops/yml/chpt10/pod-taint-yes-tolerations-Noexcute.yaml  
+pod/myapp-deploy created
+# luca @ luca in ~ [12:41:06]
+$ kubectl get pods
+NAME        READY   STATUS    RESTARTS   AGE
+myapp-dev   1/1     Running   0          22s
+
+```
+
+运算符尾 exists  只要满足 key 和 调度级别就可以调度过去
+
+```yaml
+apiVersion: v1  # api版本
+kind: Pod   # 资源类型
+metadata:   # 元数据
+  name: myapp-dev # 名字
+  namespace: default  # 命名空间
+  labels:    # 标签
+    app: myapp
+    release: dev
+spec:
+      containers:
+      - name: myapp  # 容器名
+        image: ikubernetes/myapp:v1  # 镜像
+        imagePullPolicy: IfNotPresent  # 镜像拉取规则        
+        ports:
+        - name: http
+          containerPort: 80  # 容器端口
+
+      tolerations:  # 容忍度
+      - key: "node-type"  # key值
+        operator: "Exists" # 运算符
+        value: "" # 标签
+        effect: "NoSchedule" # 级别
+```
+
+结果
+
+```bash
+# luca @ luca in ~/Documents/k8s-ops on git:main x [12:46:37] 
+$ kubectl get pods  -o wide               
+NAME        READY   STATUS    RESTARTS   AGE   IP                NODE    NOMINATED NODE   READINESS GATES
+myapp-dev   1/1     Running   0          10s   192.168.166.150   node1   <none>           <none>
+
+# luca @ luca in ~/Documents/k8s-ops on git:main x [12:46:42] 
+$ kubectl describe nodes node1|grep Taints
+Taints:             node-type=prod:NoSchedule
+```
+
+### 使用案例
+
+污点Taints和容忍度tolerations 可以灵活的控制pod 远离特定node或者不应该运行的pod从node上排出。
+
+1. 专用node  特定的node给特定的应用使用，在使用亲和性配合使用
+2. 拥有特定硬件的node(gpu)
+
+## [pod状态和重启策略](https://kubernetes.io/zh/docs/concepts/workloads/pods/pod-lifecycle/)
+
+### 常见的pod状态
+
+**Pending** 挂起状态，条件不满足
+
+**Running** pod已经绑定在一个节点上，Pod重的所有容器都被创建，至少有一个容器正在运行
+
+**Succeeded** pod中所有的容器都被成功终止，不会再被重启（控制器）
+
+**Failed** Pod中的所有容器已经终止，并且至少有一个容器是因为失败而终止
+
+**Unknown** 未知状态，pod的状态是有apiserver和kubelet通讯回去的信息，如果节点上的kubelet本身出现问题，apiserver连接不上，得不到信息，就会Unknown
+
+**Crashloopbackoff**  pod 一直重启，极有可能是因为容器配置错误
+
+**Evicted** node节点资源不足
+
+### [重启策略](https://kubernetes.io/zh/docs/concepts/workloads/pods/pod-lifecycle/#restart-policy)
+
+Pod 的 `spec` 中包含一个 `restartPolicy` 字段，其可能取值包括 Always、OnFailure 和 Never。默认值是 Always。
+
+`restartPolicy` 适用于 Pod 中的所有容器。`restartPolicy` 仅针对同一节点上 `kubelet` 的容器重启动作。当 Pod 中的容器退出时，`kubelet` 会按指数回退 方式计算重启的延迟（10s、20s、40s、...），其最长延迟为 5 分钟。 一旦某容器执行了 10 分钟并且没有出现问题，`kubelet` 对该容器的重启回退计时器执行 重置操作。
+
+### Pod 的生命周期
+
+​			 	![img](./pic/1395193-20200812220935447-1350637895.png)
+
+本页面讲述 Pod 的生命周期。 Pod 遵循一个预定义的生命周期，起始于 `Pending` [阶段](https://kubernetes.io/zh/docs/concepts/workloads/pods/pod-lifecycle/#pod-phase)，如果至少 其中有一个主要容器正常启动，则进入 `Running`，之后取决于 Pod 中是否有容器以 失败状态结束而进入 `Succeeded` 或者 `Failed` 阶段。
+
+在 Pod 运行期间，`kubelet` 能够重启容器以处理一些失效场景。 在 Pod 内部，Kubernetes 跟踪不同容器的[状态](https://kubernetes.io/zh/docs/concepts/workloads/pods/pod-lifecycle/#container-states) 并确定使 Pod 重新变得健康所需要采取的动作。
+
+在 Kubernetes API 中，Pod 包含规约部分和实际状态部分。 Pod 对象的状态包含了一组 [Pod 状况（Conditions）](https://kubernetes.io/zh/docs/concepts/workloads/pods/pod-lifecycle/#pod-conditions)。 如果应用需要的话，你也可以向其中注入[自定义的就绪性信息](https://kubernetes.io/zh/docs/concepts/workloads/pods/pod-lifecycle/#pod-readiness-gate)。
+
+Pod 在其生命周期中只会被[调度](https://kubernetes.io/zh/docs/concepts/scheduling-eviction/)一次。 一旦 Pod 被调度（分派）到某个节点，Pod 会一直在该节点运行，直到 Pod 停止或者 被[终止](https://kubernetes.io/zh/docs/concepts/workloads/pods/pod-lifecycle/#pod-termination)。
+
+初始化容器和主容器的区别
+
+1. init容器不支持Readiiness，因为在pod就绪之前已经运行完成
+2. 每个init容器必须运行成功下个容器才能运行
+3. 如果pod的初始化容器运行失败，kubernetes会不断的重启该pod直到init容器成功为止，然而pod对应的restartplolicy的值尾always，他会不断重启
+
+```bash
+# luca @ luca in ~ [13:47:03]
+$ kubectl explain pod.spec.initContainers
+KIND:     Pod
+VERSION:  v1
+
+RESOURCE: initContainers <[]Object>
+
+DESCRIPTION:
+     List of initialization containers belonging to the pod. Init containers are
+     executed in order prior to containers being started. If any init container
+     fails, the pod is considered to have failed and is handled according to its
+     restartPolicy. The name for an init container or normal container must be
+     unique among all containers. Init containers may not have Lifecycle
+     actions, Readiness probes, Liveness probes, or Startup probes. The
+     resourceRequirements of an init container are taken into account during
+     scheduling by finding the highest request/limit for each resource type, and
+     then using the max of of that value or the sum of the normal containers.
+     Limits are applied to init containers in a similar fashion. Init containers
+     cannot currently be added or removed. Cannot be updated. More info:
+     https://kubernetes.io/docs/concepts/workloads/pods/init-containers/
+
+     A single application container that you want to run within a pod.
+
+FIELDS:
+   args	<[]string>
+     Arguments to the entrypoint. The docker image's CMD is used if this is not
+     provided. Variable references $(VAR_NAME) are expanded using the
+     container's environment. If a variable cannot be resolved, the reference in
+     the input string will be unchanged. Double $$ are reduced to a single $,
+     which allows for escaping the $(VAR_NAME) syntax: i.e. "$$(VAR_NAME)" will
+     produce the string literal "$(VAR_NAME)". Escaped references will never be
+     expanded, regardless of whether the variable exists or not. Cannot be
+     updated. More info:
+     https://kubernetes.io/docs/tasks/inject-data-application/define-command-argument-container/#running-a-command-in-a-shell
+
+   command	<[]string>
+     Entrypoint array. Not executed within a shell. The docker image's
+     ENTRYPOINT is used if this is not provided. Variable references $(VAR_NAME)
+     are expanded using the container's environment. If a variable cannot be
+     resolved, the reference in the input string will be unchanged. Double $$
+     are reduced to a single $, which allows for escaping the $(VAR_NAME)
+     syntax: i.e. "$$(VAR_NAME)" will produce the string literal "$(VAR_NAME)".
+     Escaped references will never be expanded, regardless of whether the
+     variable exists or not. Cannot be updated. More info:
+     https://kubernetes.io/docs/tasks/inject-data-application/define-command-argument-container/#running-a-command-in-a-shell
+
+   env	<[]Object>
+     List of environment variables to set in the container. Cannot be updated.
+
+   envFrom	<[]Object>
+     List of sources to populate environment variables in the container. The
+     keys defined within a source must be a C_IDENTIFIER. All invalid keys will
+     be reported as an event when the container is starting. When a key exists
+     in multiple sources, the value associated with the last source will take
+     precedence. Values defined by an Env with a duplicate key will take
+     precedence. Cannot be updated.
+
+   image	<string>
+     Docker image name. More info:
+     https://kubernetes.io/docs/concepts/containers/images This field is
+     optional to allow higher level config management to default or override
+     container images in workload controllers like Deployments and StatefulSets.
+
+   imagePullPolicy	<string>
+     Image pull policy. One of Always, Never, IfNotPresent. Defaults to Always
+     if :latest tag is specified, or IfNotPresent otherwise. Cannot be updated.
+     More info:
+     https://kubernetes.io/docs/concepts/containers/images#updating-images
+
+   lifecycle	<Object>
+     Actions that the management system should take in response to container
+     lifecycle events. Cannot be updated.
+
+   livenessProbe	<Object>
+     Periodic probe of container liveness. Container will be restarted if the
+     probe fails. Cannot be updated. More info:
+     https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle#container-probes
+
+   name	<string> -required-
+     Name of the container specified as a DNS_LABEL. Each container in a pod
+     must have a unique name (DNS_LABEL). Cannot be updated.
+
+   ports	<[]Object>
+     List of ports to expose from the container. Exposing a port here gives the
+     system additional information about the network connections a container
+     uses, but is primarily informational. Not specifying a port here DOES NOT
+     prevent that port from being exposed. Any port which is listening on the
+     default "0.0.0.0" address inside a container will be accessible from the
+     network. Cannot be updated.
+
+   readinessProbe	<Object>
+     Periodic probe of container service readiness. Container will be removed
+     from service endpoints if the probe fails. Cannot be updated. More info:
+     https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle#container-probes
+
+   resources	<Object>
+     Compute Resources required by this container. Cannot be updated. More info:
+     https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+
+   securityContext	<Object>
+     SecurityContext defines the security options the container should be run
+     with. If set, the fields of SecurityContext override the equivalent fields
+     of PodSecurityContext. More info:
+     https://kubernetes.io/docs/tasks/configure-pod-container/security-context/
+
+   startupProbe	<Object>
+     StartupProbe indicates that the Pod has successfully initialized. If
+     specified, no other probes are executed until this completes successfully.
+     If this probe fails, the Pod will be restarted, just as if the
+     livenessProbe failed. This can be used to provide different probe
+     parameters at the beginning of a Pod's lifecycle, when it might take a long
+     time to load data or warm a cache, than during steady-state operation. This
+     cannot be updated. More info:
+     https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle#container-probes
+
+   stdin	<boolean>
+     Whether this container should allocate a buffer for stdin in the container
+     runtime. If this is not set, reads from stdin in the container will always
+     result in EOF. Default is false.
+
+   stdinOnce	<boolean>
+     Whether the container runtime should close the stdin channel after it has
+     been opened by a single attach. When stdin is true the stdin stream will
+     remain open across multiple attach sessions. If stdinOnce is set to true,
+     stdin is opened on container start, is empty until the first client
+     attaches to stdin, and then remains open and accepts data until the client
+     disconnects, at which time stdin is closed and remains closed until the
+     container is restarted. If this flag is false, a container processes that
+     reads from stdin will never receive an EOF. Default is false
+
+   terminationMessagePath	<string>
+     Optional: Path at which the file to which the container's termination
+     message will be written is mounted into the container's filesystem. Message
+     written is intended to be brief final status, such as an assertion failure
+     message. Will be truncated by the node if greater than 4096 bytes. The
+     total message length across all containers will be limited to 12kb.
+     Defaults to /dev/termination-log. Cannot be updated.
+
+   terminationMessagePolicy	<string>
+     Indicate how the termination message should be populated. File will use the
+     contents of terminationMessagePath to populate the container status message
+     on both success and failure. FallbackToLogsOnError will use the last chunk
+     of container log output if the termination message file is empty and the
+     container exited with an error. The log output is limited to 2048 bytes or
+     80 lines, whichever is smaller. Defaults to File. Cannot be updated.
+
+   tty	<boolean>
+     Whether this container should allocate a TTY for itself, also requires
+     'stdin' to be true. Default is false.
+
+   volumeDevices	<[]Object>
+     volumeDevices is the list of block devices to be used by the container.
+
+   volumeMounts	<[]Object>
+     Pod volumes to mount into the container's filesystem. Cannot be updated.
+
+   workingDir	<string>
+     Container's working directory. If not specified, the container runtime's
+     default will be used, which might be configured in the container image.
+     Cannot be updated.
+
+```
+
+主容器
+
+1. 容器钩子,在容器启动之后和停止之前可以用钩子钩住一些命令，来做开场前的预设以及结束前的清理
+
+   1. 有两个回调暴露给容器：
+
+      ```
+      PostStart
+      ```
+
+      这个回调在容器被创建之后立即被执行，如果执行失败，该容器会被杀死，根据重启策略决定容器是否重启。 但是，不能保证回调会在容器入口点（ENTRYPOINT）之前执行。 没有参数传递给处理程序。
+
+      ```
+      PreStop
+      ```
+
+      在容器因 API 请求或者管理事件（诸如存活态探针、启动探针失败、资源抢占、资源竞争等） 而被终止之前，此回调会被调用。 如果容器已经处于已终止或者已完成状态，则对 preStop 回调的调用将失败。 在用来停止容器的 TERM 信号被发出之前，回调必须执行结束。 Pod 的终止宽限周期在 `PreStop` 回调被执行之前即开始计数，所以无论 回调函数的执行结果如何，容器最终都会在 Pod 的终止宽限期内被终止。 没有参数会被传递给处理程序。 
+
+   
+
+### Pod 生命期 
+
+和一个个独立的应用容器一样，Pod 也被认为是相对临时性（而不是长期存在）的实体。 Pod 会被创建、赋予一个唯一的 ID（[UID](https://kubernetes.io/zh/docs/concepts/overview/working-with-objects/names/#uids)）， 并被调度到节点，并在终止（根据重启策略）或删除之前一直运行在该节点。
+
+如果一个[节点](https://kubernetes.io/zh/docs/concepts/architecture/nodes/)死掉了，调度到该节点 的 Pod 也被计划在给定超时期限结束后[删除](https://kubernetes.io/zh/docs/concepts/workloads/pods/pod-lifecycle/#pod-garbage-collection)。
+
+Pod 自身不具有自愈能力。如果 Pod 被调度到某[节点](https://kubernetes.io/zh/docs/concepts/architecture/nodes/) 而该节点之后失效，Pod 会被删除；类似地，Pod 无法在因节点资源 耗尽或者节点维护而被驱逐期间继续存活。Kubernetes 使用一种高级抽象 来管理这些相对而言可随时丢弃的 Pod 实例，称作 [控制器](https://kubernetes.io/zh/docs/concepts/architecture/controller/)。
+
+任何给定的 Pod （由 UID 定义）从不会被“重新调度（rescheduled）”到不同的节点； 相反，这一 Pod 可以被一个新的、几乎完全相同的 Pod 替换掉。 如果需要，新 Pod 的名字可以不变，但是其 UID 会不同。
+
+如果某物声称其生命期与某 Pod 相同，例如存储[卷](https://kubernetes.io/zh/docs/concepts/storage/volumes/)， 这就意味着该对象在此 Pod （UID 亦相同）存在期间也一直存在。 如果 Pod 因为任何原因被删除，甚至某完全相同的替代 Pod 被创建时， 这个相关的对象（例如这里的卷）也会被删除并重建。
+
+### pod健康监测
+
+[Probe](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.23/#probe-v1-core) 是由 [kubelet](https://kubernetes.io/zh/docs/reference/command-line-tools-reference/kubelet/) 对容器执行的定期诊断。 要执行诊断，kubelet 调用由容器实现的 [Handler](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.23/#handler-v1-core) （处理程序）。有三种类型的处理程序：
+
+- [ExecAction](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.23/#execaction-v1-core)： 在容器内执行指定命令。如果命令退出时返回码为 0 则认为诊断成功。
+- [TCPSocketAction](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.23/#tcpsocketaction-v1-core)： 对容器的 IP 地址上的指定端口执行 TCP 检查。如果端口打开，则诊断被认为是成功的。
+- [HTTPGetAction](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.23/#httpgetaction-v1-core)： 对容器的 IP 地址上指定端口和路径执行 HTTP Get 请求。如果响应的状态码大于等于 200 且小于 400，则诊断被认为是成功的。
+
+每次探测都将获得以下三种结果之一：
+
+- `Success`（成功）：容器通过了诊断。
+- `Failure`（失败）：容器未通过诊断。
+- `Unknown`（未知）：诊断失败，因此不会采取任何行动。
+
+针对运行中的容器，`kubelet` 可以选择是否执行以下三种探针，以及如何针对探测结果作出反应：
+
+- `livenessProbe`：指示容器是否正在运行。如果存活态探测失败，则 kubelet 会杀死容器， 并且容器将根据其[重启策略](https://kubernetes.io/zh/docs/concepts/workloads/pods/pod-lifecycle/#restart-policy)决定未来。如果容器不提供存活探针， 则默认状态为 `Success`。
+- `readinessProbe`：指示容器是否准备好为请求提供服务。如果就绪态探测失败， 端点控制器将从与 Pod 匹配的所有服务的端点列表中删除该 Pod 的 IP 地址。 初始延迟之前的就绪态的状态值默认为 `Failure`。 如果容器不提供就绪态探针，则默认状态为 `Success`。
+- `startupProbe`: 指示容器中的应用是否已经启动。如果提供了启动探针，则所有其他探针都会被 禁用，直到此探针成功为止。如果启动探测失败，`kubelet` 将杀死容器，而容器依其 [重启策略](https://kubernetes.io/zh/docs/concepts/workloads/pods/pod-lifecycle/#restart-policy)进行重启。 如果容器没有提供启动探测，则默认状态为 `Success`。
+
+
+
+#### 何时该使用存活态探针? 
+
+**FEATURE STATE:** `Kubernetes v1.0 [stable]`
+
+如果容器中的进程能够在遇到问题或不健康的情况下自行崩溃，则不一定需要存活态探针; `kubelet` 将根据 Pod 的`restartPolicy` 自动执行修复操作。
+
+如果你希望容器在探测失败时被杀死并重新启动，那么请指定一个存活态探针， 并指定`restartPolicy` 为 "`Always`" 或 "`OnFailure`"。
+
+#### 何时该使用就绪态探针? 
+
+**FEATURE STATE:** `Kubernetes v1.0 [stable]`
+
+如果要仅在探测成功时才开始向 Pod 发送请求流量，请指定就绪态探针。 在这种情况下，就绪态探针可能与存活态探针相同，但是规约中的就绪态探针的存在意味着 Pod 将在启动阶段不接收任何数据，并且只有在探针探测成功后才开始接收数据。
+
+如果你希望容器能够自行进入维护状态，也可以指定一个就绪态探针，检查某个特定于 就绪态的因此不同于存活态探测的端点。
+
+如果你的应用程序对后端服务有严格的依赖性，你可以同时实现存活态和就绪态探针。 当应用程序本身是健康的，存活态探针检测通过后，就绪态探针会额外检查每个所需的后端服务是否可用。 这可以帮助你避免将流量导向只能返回错误信息的 Pod。
+
+如果你的容器需要在启动期间加载大型数据、配置文件或执行迁移，你可以使用 [启动探针](https://kubernetes.io/zh/docs/concepts/workloads/pods/pod-lifecycle/#when-should-you-use-a-startup-probe)。 然而，如果你想区分已经失败的应用和仍在处理其启动数据的应用，你可能更倾向于使用就绪探针。
+
+**说明：**
+
+请注意，如果你只是想在 Pod 被删除时能够排空请求，则不一定需要使用就绪态探针； 在删除 Pod 时，Pod 会自动将自身置于未就绪状态，无论就绪态探针是否存在。 等待 Pod 中的容器停止期间，Pod 会一直处于未就绪状态。
+
+#### 何时该使用启动探针？ 
+
+**FEATURE STATE:** `Kubernetes v1.18 [beta]`
+
+对于所包含的容器需要较长时间才能启动就绪的 Pod 而言，启动探针是有用的。 你不再需要配置一个较长的存活态探测时间间隔，只需要设置另一个独立的配置选定， 对启动期间的容器执行探测，从而允许使用远远超出存活态时间间隔所允许的时长。
+
+如果你的容器启动时间通常超出 `initialDelaySeconds + failureThreshold × periodSeconds` 总值，你应该设置一个启动探测，对存活态探针所使用的同一端点执行检查。 `periodSeconds` 的默认值是 10 秒。你应该将其 `failureThreshold` 设置得足够高， 以便容器有充足的时间完成启动，并且避免更改存活态探针所使用的默认值。 这一设置有助于减少死锁状况的发生。
+
+### pod 创建的阶段
+
+1. 自主pod（kind: pod）
+
+   ![img](./pic/0*r3DyRvMZJ_LUC9w4.png)
+
+   ​                           
+
+   当用户创建 pod 时，这个请求给 apiserver，apiserver 把创建请求的状态保存在 etcd 中; 接下来 apiserver 会请求 scheduler 来完成调度，如果调度成功，会把调度的结果(如调度到哪个
+   节点上了，运行在哪个节点上了，把它更新到 etcd 的 pod 资源状态中)保存在 etcd 中，一旦存到 etcd 中并且完成更新以后，如调度到 node1 上，那么 node1 节点上的 kubelet 通过 apiserver 当中的状态变化知道有一些任务被执行了，所以此时此 kubelet 会拿到用户创建时所提交的 清单，这个清单会在当前节点上运行或者启动这个 pod，如果创建成功或者失败会有一个当前状态，当 前这个状态会发给 apiserver，apiserver 在存到 etcd 中;在这个过程中，etcd 和 apiserver 一直在打 交道，不停的交互，scheduler 也参与其中，负责调度 pod 到合适的 node 节点上，这个就是 pod 的创 建过程
+   pod 在整个生命周期中有非常多的用户行为:
+   1、初始化容器完成初始化
+   2、主容器启动后可以做启动后钩子
+   3、主容器结束前可以做结束前钩子
+   4、在主容器运行中可以做一些健康检测，如 `liveness probe`，`readness probe`，`startupProbe`
+
+   
