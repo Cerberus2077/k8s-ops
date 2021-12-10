@@ -2363,7 +2363,7 @@ Pod 自身不具有自愈能力。如果 Pod 被调度到某[节点](https://kub
   - 许多应用长时间运行最终过度到无法运行的状态，除了重启，无法恢复。同行强况下，k8s会发现应用程序已经终止，然后重启应用程序pod，有事应用程序因为某些原因导致暂时无法对外提供服务，但是应用软件没有终止，导致k8s无法隔离有故障的pod，调用者可能会访问到有故障的pod，导致业务运行不稳定。k8s提供 livenessprobe来监测应用程序是否正常运行，并且对相应的情况进行补救。
 - `readinessProbe`：指示容器是否准备好为请求提供服务。如果就绪态探测失败， 端点控制器将从与 Pod 匹配的所有服务的端点列表中删除该 Pod 的 IP 地址。 初始延迟之前的就绪态的状态值默认为 `Failure`。 如果容器不提供就绪态探针，则默认状态为 `Success`。
   -  在没有配置readinessProbe的资源对象中，pod中的容器启动完成后，就认为pod中的应用程序可以对外提供服务，该pod会加入相对应的service，对外提供服务，但有时一些容器启动后需要经过较长时间的加载，才能对外提供服务，这时候如果对外提供服务，执行结果必然无法达到预期，并且影响用户体验。比如tomcat应用程序并不是简单的tomcat 启动就可以对外提供服务，还需要等待spring容器初始化，连接上数据库等。。。 
-- `startupProbe`: 指示容器中的应用是否已经启动。如果提供了启动探针，则所有其他探针都会被 禁用，直到此探针成功为止。如果启动探测失败，`kubelet` 将杀死容器，而容器依其 [重启策略](https://kubernetes.io/zh/docs/concepts/workloads/pods/pod-lifecycle/#restart-policy)进行重启。 如果容器没有提供启动探测，则默认状态为 `Success`。
+- `startupProbe`: 指示容器中的应用是否已经启动。**如果提供了启动探针，则所有其他探针都会被 禁用，直到此探针成功为止。**如果启动探测失败，`kubelet` 将杀死容器，而容器依其 [重启策略](https://kubernetes.io/zh/docs/concepts/workloads/pods/pod-lifecycle/#restart-policy)进行重启。 如果容器没有提供启动探测，则默认状态为 `Success`。
 
 
 
@@ -2722,4 +2722,155 @@ $ kubectl logs -f   liveness-http liveness
 ```
 
 ## liveness探针tcp例子
+
+如你所见，TCP 检测的配置和 HTTP 检测非常相似。 下面这个例子同时使用就绪和存活探测器。kubelet 会在容器启动 5 秒后发送第一个就绪探测。 这会尝试连接 `goproxy` 容器的 8080 端口。 如果探测成功，这个 Pod 会被标记为就绪状态，kubelet 将继续每隔 10 秒运行一次检测。
+
+除了就绪探测，这个配置包括了一个存活探测。 kubelet 会在容器启动 15 秒后进行第一次存活探测。 与就绪探测类似，会尝试连接 `goproxy` 容器的 8080 端口。 如果存活探测失败，这个容器会被重新启动。
+
+```yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: liveness-readness-tcp
+  labels:
+    app: liveness-readness-tcp
+spec:
+  containers:
+  - name: liveness-readness-tcp
+    image: nginx
+    ports:
+    - containerPort: 80
+    readinessProbe:  #服务可用检测
+      tcpSocket:
+        port: 80
+      initialDelaySeconds: 5
+      periodSeconds: 10
+    livenessProbe: #容器可用检测
+      tcpSocket:
+        port: 80
+      initialDelaySeconds: 15  #15秒后开始检测
+      periodSeconds: 20  # 时间间隔20秒
+
+```
+
+
+
+```shell
+kubectl apply -f tcp-liveness-readbess-prob.yaml
+```
+
+15 秒之后，通过看 Pod 事件来检测存活探测器：
+
+```shell
+kubectl describe pod liveness-readness-tcp
+```
+
+## startup rpobe 就绪探针例子
+
+有时候，会有一些现有的应用程序在启动时需要较多的初始化时间。 要不影响对引起探测死锁的快速响应，这种情况下，设置存活探测参数是要技巧的。 技巧就是使用一个命令来设置启动探测，针对HTTP 或者 TCP 检测，可以通过设置 `failureThreshold * periodSeconds` 参数来保证有足够长的时间应对糟糕情况下的启动时间。
+
+```yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: startup-probe-tcp
+  labels:
+    app: startup-probe-tcp
+spec:
+  containers:
+  - name: liveness-readness-tcp
+    image: nginx
+    ports:
+    - containerPort: 80
+    readinessProbe:  #服务可用检测
+      tcpSocket:
+        port: 80
+      initialDelaySeconds: 5
+      periodSeconds: 10
+    livenessProbe: #容器可用检测
+      tcpSocket:
+        port: 80
+      initialDelaySeconds: 15  #15秒后开始检测
+      periodSeconds: 20  # 时间间隔20秒
+    startupProbe: # 就绪检查
+      tcpSocket:
+        port: 80    
+      failureThreshold: 30
+      periodSeconds: 10
+```
+
+幸亏有启动探测，应用程序将会有最多 5 分钟(30 * 10 = 300s) 的时间来完成它的启动。 一旦启动探测成功一次，存活探测任务就会接管对容器的探测，对容器死锁可以快速响应。 如果启动探测一直没有成功，容器会在 300 秒后被杀死，并且根据 `restartPolicy` 来设置 Pod 状态。
+
+```bash
+# luca @ luca in ~/Documents/k8s-ops/yml/chpt10 on git:main x [22:54:42] 
+$ kubectl apply -f pod-starup-probe.yaml 
+pod/startup-probe-tcp created
+
+# luca @ luca in ~/Documents/k8s-ops/yml/chpt10 on git:main x [22:57:27] 
+$ kubectl get pod  -o wide
+NAME                READY   STATUS    RESTARTS   AGE   IP               NODE    NOMINATED NODE   READINESS GATES
+liveness-tcp        1/1     Running   0          46m   192.168.104.44   node2   <none>           <none>
+startup-probe-tcp   1/1     Running   0          63s   192.168.104.46   node2   <none>           <none>
+
+# luca @ luca in ~/Documents/k8s-ops/yml/chpt10 on git:main x [22:58:29] 
+$ kubectl describe pod startup-probe-tcp                                 
+Name:         startup-probe-tcp
+Namespace:    default
+Priority:     0
+Node:         node2/192.168.0.110
+Start Time:   Fri, 10 Dec 2021 22:57:27 +0800
+Labels:       app=startup-probe-tcp
+Annotations:  cni.projectcalico.org/podIP: 192.168.104.46/32
+              cni.projectcalico.org/podIPs: 192.168.104.46/32
+Status:       Running
+IP:           192.168.104.46
+IPs:
+  IP:  192.168.104.46
+Containers:
+  liveness-readness-tcp:
+    Container ID:   docker://0bdd3e6c464aff6dece9cf3ab9ce7bfa98437bb87e092be6fb5bd0fc74d62be6
+    Image:          nginx
+    Image ID:       docker-pullable://nginx@sha256:9522864dd661dcadfd9958f9e0de192a1fdda2c162a35668ab6ac42b465f0603
+    Port:           80/TCP
+    Host Port:      0/TCP
+    State:          Running
+      Started:      Fri, 10 Dec 2021 22:57:44 +0800
+    Ready:          True
+    Restart Count:  0
+    Liveness:       tcp-socket :80 delay=15s timeout=1s period=20s #success=1 #failure=3
+    Readiness:      tcp-socket :80 delay=5s timeout=1s period=10s #success=1 #failure=3
+    Startup:        tcp-socket :80 delay=0s timeout=1s period=10s #success=1 #failure=30
+    Environment:    <none>
+    Mounts:
+      /var/run/secrets/kubernetes.io/serviceaccount from kube-api-access-6bs5s (ro)
+Conditions:
+  Type              Status
+  Initialized       True 
+  Ready             True 
+  ContainersReady   True 
+  PodScheduled      True 
+Volumes:
+  kube-api-access-6bs5s:
+    Type:                    Projected (a volume that contains injected data from multiple sources)
+    TokenExpirationSeconds:  3607
+    ConfigMapName:           kube-root-ca.crt
+    ConfigMapOptional:       <nil>
+    DownwardAPI:             true
+QoS Class:                   BestEffort
+Node-Selectors:              <none>
+Tolerations:                 node.kubernetes.io/not-ready:NoExecute op=Exists for 300s
+                             node.kubernetes.io/unreachable:NoExecute op=Exists for 300s
+Events:
+  Type    Reason     Age   From               Message
+  ----    ------     ----  ----               -------
+  Normal  Scheduled  83s   default-scheduler  Successfully assigned default/startup-probe-tcp to node2
+  Normal  Pulling    82s   kubelet            Pulling image "nginx"
+  Normal  Pulled     66s   kubelet            Successfully pulled image "nginx" in 15.592647933s
+  Normal  Created    66s   kubelet            Created container liveness-readness-tcp
+  Normal  Started    66s   kubelet            Started container liveness-readness-tcp
+```
+
+
+
+
 

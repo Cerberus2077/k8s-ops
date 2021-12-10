@@ -1,12 +1,12 @@
 apiVersion: v1
 kind: Pod
 metadata:
-  name: liveness-tcp
+  name: startup-probe-tcp
   labels:
-    app: liveness-tcp
+    app: startup-probe-tcp
 spec:
   containers:
-  - name: liveness-tcp
+  - name: liveness-readness-tcp
     image: nginx
     ports:
     - containerPort: 80
@@ -20,8 +20,8 @@ spec:
         port: 80
       initialDelaySeconds: 15  #15秒后开始检测
       periodSeconds: 20  # 时间间隔20秒
-    startupProbe: #就绪检测
+    startupProbe: # 就需检查
       tcpSocket:
-        port: 80
-      periodSeconds: 10  # 时间间隔20秒
-      failureThreshold: 30 # 失败重试30次
+        port: 80    
+      failureThreshold: 30
+      periodSeconds: 10
