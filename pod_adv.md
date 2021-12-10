@@ -1358,7 +1358,7 @@ Events:              <none>
 
 ### 创建污点
 
-查看帮助文档
+### 关于污点的说明
 
 ```bash
 # cerberus @ cerberusdeMacBook-Pro in ~/Documents/k8s-ops/yml/chpt9 on git:main x [21:34:16]
@@ -1416,6 +1416,339 @@ DESCRIPTION:
      Required. The taint key to be applied to a node.
 (base)
 # cerberus @ cerberusdeMacBook-Pro in ~/Documents/k8s-ops/yml/chpt9 on git:main x [21:35:36]
+```
+
+在pod上定义容忍度 支持两种
+
+1. 等值密钥: key 和value的值完全匹配
+2. 存在判断Lkkey 和effect必须同时匹配，value 可以为空
+
+pod上定义的污点可能不止一个，在节点上定义的污点也可能有多个，需要猪哥检查容忍度和污点能否匹配，每个污点都被容忍，才能完成调度，如果不能容忍，需要查看pod的容忍度 
+
+查看pod的容忍度
+
+首先查看pod
+
+```bash
+$ kubectl get pods -n kube-system  -o wide
+NAME                                       READY   STATUS    RESTARTS        AGE     IP                NODE     NOMINATED NODE   READINESS GATES
+calico-kube-controllers-67bb5696f5-dwfmf   1/1     Running   3 (2d15h ago)   2d22h   192.168.166.134   node1    <none>           <none>
+calico-node-4fd8c                          1/1     Running   1 (2d15h ago)   2d22h   192.168.0.110     node2    <none>           <none>
+calico-node-8xp57                          1/1     Running   1 (2d15h ago)   2d22h   192.168.247.34    node1    <none>           <none>
+calico-node-xs9hf                          1/1     Running   1 (2d15h ago)   2d22h   122.114.50.242    master   <none>           <none>
+coredns-7d89d9b6b8-766ml                   1/1     Running   1 (2d15h ago)   2d22h   192.168.166.135   node1    <none>           <none>
+coredns-7d89d9b6b8-qh4d8                   1/1     Running   1 (2d15h ago)   2d22h   192.168.166.136   node1    <none>           <none>
+etcd-master                                1/1     Running   2 (2d15h ago)   2d22h   122.114.50.242    master   <none>           <none>
+kube-apiserver-master                      1/1     Running   2 (2d15h ago)   2d22h   122.114.50.242    master   <none>           <none>
+kube-controller-manager-master             1/1     Running   3 (2d15h ago)   2d22h   122.114.50.242    master   <none>           <none>
+kube-proxy-24np4                           1/1     Running   1 (2d15h ago)   2d22h   192.168.247.34    node1    <none>           <none>
+kube-proxy-hvvzd                           1/1     Running   1 (2d15h ago)   2d22h   122.114.50.242    master   <none>           <none>
+kube-proxy-z6vc8                           1/1     Running   1 (2d15h ago)   2d22h   192.168.0.110     node2    <none>           <none>
+kube-scheduler-master                      1/1     Running   3 (2d15h ago)   2d22h   122.114.50.242    master   <none>           <none>
+```
+
+查看具有非调度污点的master上运行的apiserverpod的描述信息，应该定义了容忍度
+
+```bash
+# luca @ luca in ~ [10:13:08] C:1
+$ kubectl describe pods kube-apiserver-master -n kube-system
+Name:                 kube-apiserver-master
+Namespace:            kube-system
+Priority:             2000001000
+Priority Class Name:  system-node-critical
+Node:                 master/122.114.50.242
+Start Time:           Tue, 07 Dec 2021 18:33:01 +0800
+Labels:               component=kube-apiserver
+                      tier=control-plane
+Annotations:          kubeadm.kubernetes.io/kube-apiserver.advertise-address.endpoint: 122.114.50.242:6443
+                      kubernetes.io/config.hash: 5e0c843f3e098f186efaaaaf43ce7471
+                      kubernetes.io/config.mirror: 5e0c843f3e098f186efaaaaf43ce7471
+                      kubernetes.io/config.seen: 2021-12-07T11:39:18.997330913+08:00
+                      kubernetes.io/config.source: file
+                      seccomp.security.alpha.kubernetes.io/pod: runtime/default
+Status:               Running
+IP:                   122.114.50.242
+IPs:
+  IP:           122.114.50.242
+Controlled By:  Node/master
+Containers:
+  kube-apiserver:
+    Container ID:  docker://62ffef035982632bf22f3fda95a0d36e2f0023da0b74d98cc1734c9e69d2e425
+    Image:         registry.cn-hangzhou.aliyuncs.com/google_containers/kube-apiserver:v1.22.4
+    Image ID:      docker-pullable://registry.aliyuncs.com/google_containers/kube-apiserver@sha256:c52183c0c9cd24f0349d36607c95c9d861df569c568877ddf5755e8e8364c110
+    Port:          <none>
+    Host Port:     <none>
+    Command:
+      kube-apiserver
+      --advertise-address=122.114.50.242
+      --allow-privileged=true
+      --authorization-mode=Node,RBAC
+      --client-ca-file=/etc/kubernetes/pki/ca.crt
+      --enable-admission-plugins=NodeRestriction
+      --enable-bootstrap-token-auth=true
+      --etcd-cafile=/etc/kubernetes/pki/etcd/ca.crt
+      --etcd-certfile=/etc/kubernetes/pki/apiserver-etcd-client.crt
+      --etcd-keyfile=/etc/kubernetes/pki/apiserver-etcd-client.key
+      --etcd-servers=https://127.0.0.1:2379
+      --kubelet-client-certificate=/etc/kubernetes/pki/apiserver-kubelet-client.crt
+      --kubelet-client-key=/etc/kubernetes/pki/apiserver-kubelet-client.key
+      --kubelet-preferred-address-types=InternalIP,ExternalIP,Hostname
+      --proxy-client-cert-file=/etc/kubernetes/pki/front-proxy-client.crt
+      --proxy-client-key-file=/etc/kubernetes/pki/front-proxy-client.key
+      --requestheader-allowed-names=front-proxy-client
+      --requestheader-client-ca-file=/etc/kubernetes/pki/front-proxy-ca.crt
+      --requestheader-extra-headers-prefix=X-Remote-Extra-
+      --requestheader-group-headers=X-Remote-Group
+      --requestheader-username-headers=X-Remote-User
+      --secure-port=6443
+      --service-account-issuer=https://kubernetes.default.svc.cluster.local
+      --service-account-key-file=/etc/kubernetes/pki/sa.pub
+      --service-account-signing-key-file=/etc/kubernetes/pki/sa.key
+      --service-cluster-ip-range=10.96.0.0/12
+      --tls-cert-file=/etc/kubernetes/pki/apiserver.crt
+      --tls-private-key-file=/etc/kubernetes/pki/apiserver.key
+    State:          Running
+      Started:      Tue, 07 Dec 2021 18:33:02 +0800
+    Last State:     Terminated
+      Reason:       Error
+      Exit Code:    137
+      Started:      Tue, 07 Dec 2021 12:47:09 +0800
+      Finished:     Tue, 07 Dec 2021 18:32:41 +0800
+    Ready:          True
+    Restart Count:  2
+    Requests:
+      cpu:        250m
+    Liveness:     http-get https://122.114.50.242:6443/livez delay=10s timeout=15s period=10s #success=1 #failure=8
+    Readiness:    http-get https://122.114.50.242:6443/readyz delay=0s timeout=15s period=1s #success=1 #failure=3
+    Startup:      http-get https://122.114.50.242:6443/livez delay=10s timeout=15s period=10s #success=1 #failure=24
+    Environment:  <none>
+    Mounts:
+      /etc/kubernetes/pki from k8s-certs (ro)
+      /etc/pki from etc-pki (ro)
+      /etc/ssl/certs from ca-certs (ro)
+Conditions:
+  Type              Status
+  Initialized       True
+  Ready             True
+  ContainersReady   True
+  PodScheduled      True
+Volumes:
+  ca-certs:
+    Type:          HostPath (bare host directory volume)
+    Path:          /etc/ssl/certs
+    HostPathType:  DirectoryOrCreate
+  etc-pki:
+    Type:          HostPath (bare host directory volume)
+    Path:          /etc/pki
+    HostPathType:  DirectoryOrCreate
+  k8s-certs:
+    Type:          HostPath (bare host directory volume)
+    Path:          /etc/kubernetes/pki
+    HostPathType:  DirectoryOrCreate
+QoS Class:         Burstable
+Node-Selectors:    <none>
+Tolerations:       :NoExecute op=Exists
+Events:            <none>
+```
+
+这里定义了容忍度,能够容忍节点上的排斥等你几 NoExcute，可以容忍调度级别。所以apiserver可以调度到控制节点master上 
+
+```
+Tolerations:       :NoExecute op=Exists
+```
+
+### 管理污点
+
+```bash
+# luca @ luca in ~ [10:20:46]
+$ kubectl taint --help
+Update the taints on one or more nodes.
+
+  *  A taint consists of a key, value, and effect. As an argument here, it is
+expressed as key=value:effect.
+  *  The key must begin with a letter or number, and may contain letters,
+numbers, hyphens, dots, and underscores, up to  253 characters.
+  *  Optionally, the key can begin with a DNS subdomain prefix and a single '/',
+like example.com/my-app.
+  *  The value is optional. If given, it must begin with a letter or number, and
+may contain letters, numbers, hyphens, dots, and underscores, up to  63
+characters.
+  *  The effect must be NoSchedule, PreferNoSchedule or NoExecute.
+  *  Currently taint can only apply to node.
+
+Examples:
+  # Update node 'foo' with a taint with key 'dedicated' and value 'special-user'
+and effect 'NoSchedule'
+  # If a taint with that key and effect already exists, its value is replaced as
+specified
+  kubectl taint nodes foo dedicated=special-user:NoSchedule
+
+  # Remove from node 'foo' the taint with key 'dedicated' and effect
+'NoSchedule' if one exists
+  kubectl taint nodes foo dedicated:NoSchedule-
+
+  # Remove from node 'foo' all the taints with key 'dedicated'
+  kubectl taint nodes foo dedicated-
+
+  # Add a taint with key 'dedicated' on nodes having label mylabel=X
+  kubectl taint node -l myLabel=X  dedicated=foo:PreferNoSchedule
+
+  # Add to node 'foo' a taint with key 'bar' and no value
+  kubectl taint nodes foo bar:NoSchedule
+
+Options:
+      --all=false: Select all nodes in the cluster
+      --allow-missing-template-keys=true: If true, ignore any errors in
+templates when a field or map key is missing in the template. Only applies to
+golang and jsonpath output formats.
+      --dry-run='none': Must be "none", "server", or "client". If client
+strategy, only print the object that would be sent, without sending it. If
+server strategy, submit server-side request without persisting the resource.
+      --field-manager='kubectl-taint': Name of the manager used to track field
+ownership.
+  -o, --output='': Output format. One of:
+json|yaml|name|go-template|go-template-file|template|templatefile|jsonpath|jsonpath-as-json|jsonpath-file.
+      --overwrite=false: If true, allow taints to be overwritten, otherwise
+reject taint updates that overwrite existing taints.
+  -l, --selector='': Selector (label query) to filter on, supports '=', '==',
+and '!='.(e.g. -l key1=value1,key2=value2)
+      --show-managed-fields=false: If true, keep the managedFields when printing
+objects in JSON or YAML format.
+      --template='': Template string or path to template file to use when
+-o=go-template, -o=go-template-file. The template format is golang templates
+[http://golang.org/pkg/text/template/#pkg-overview].
+      --validate=true: If true, use a schema to validate the input before
+sending it
+
+Usage:
+  kubectl taint NODE NAME KEY_1=VAL_1:TAINT_EFFECT_1 ...
+KEY_N=VAL_N:TAINT_EFFECT_N [options]
+
+Use "kubectl options" for a list of global command-line options (applies to all
+commands).
+```
+
+我们可以做一个容忍度，node1环境生产专用，其他节点时测试的
+
+**kubectl taint node 节点名 key=value:排斥等级**
+
+```bash
+# luca @ luca in ~ [10:21:38]
+$ kubectl taint node node1 node-type=prod:NoSchedule
+node/node1 tainted
+# luca @ luca in ~ [10:35:58]
+$ kubectl describe nodes node1
+Name:               node1
+Roles:              worker
+Labels:             beta.kubernetes.io/arch=amd64
+                    beta.kubernetes.io/os=linux
+                    kubernetes.io/arch=amd64
+                    kubernetes.io/hostname=node1
+                    kubernetes.io/os=linux
+                    node-role.kubernetes.io/worker=worker
+                    zone=bar
+Annotations:        kubeadm.alpha.kubernetes.io/cri-socket: /var/run/dockershim.sock
+                    node.alpha.kubernetes.io/ttl: 0
+                    projectcalico.org/IPv4Address: 192.168.247.34/16
+                    projectcalico.org/IPv4IPIPTunnelAddr: 192.168.166.128
+                    volumes.kubernetes.io/controller-managed-attach-detach: true
+CreationTimestamp:  Tue, 07 Dec 2021 11:39:50 +0800
+Taints:             node-type=prod:NoSchedule
+Unschedulable:      false
+Lease:
+  HolderIdentity:  node1
+  AcquireTime:     <unset>
+  RenewTime:       Fri, 10 Dec 2021 10:37:28 +0800
+Conditions:
+  Type                 Status  LastHeartbeatTime                 LastTransitionTime                Reason                       Message
+  ----                 ------  -----------------                 ------------------                ------                       -------
+  NetworkUnavailable   False   Tue, 07 Dec 2021 18:33:26 +0800   Tue, 07 Dec 2021 18:33:26 +0800   CalicoIsUp                   Calico is running on this node
+  MemoryPressure       False   Fri, 10 Dec 2021 10:34:21 +0800   Tue, 07 Dec 2021 11:39:50 +0800   KubeletHasSufficientMemory   kubelet has sufficient memory available
+  DiskPressure         False   Fri, 10 Dec 2021 10:34:21 +0800   Tue, 07 Dec 2021 11:39:50 +0800   KubeletHasNoDiskPressure     kubelet has no disk pressure
+  PIDPressure          False   Fri, 10 Dec 2021 10:34:21 +0800   Tue, 07 Dec 2021 11:39:50 +0800   KubeletHasSufficientPID      kubelet has sufficient PID available
+  Ready                True    Fri, 10 Dec 2021 10:34:21 +0800   Tue, 07 Dec 2021 18:33:34 +0800   KubeletReady                 kubelet is posting ready status
+Addresses:
+  InternalIP:  192.168.247.34
+  Hostname:    node1
+Capacity:
+  cpu:                2
+  ephemeral-storage:  30832484Ki
+  hugepages-1Gi:      0
+  hugepages-2Mi:      0
+  memory:             3881576Ki
+  pods:               110
+Allocatable:
+  cpu:                2
+  ephemeral-storage:  28415217208
+  hugepages-1Gi:      0
+  hugepages-2Mi:      0
+  memory:             3779176Ki
+  pods:               110
+System Info:
+  Machine ID:                 1a8794da328f494cab266e8cf2fc3c84
+  System UUID:                DBD45810-BDC0-4989-AD6F-6555891090D8
+  Boot ID:                    5a65ffc5-598d-4940-814a-796da25ce990
+  Kernel Version:             3.10.0-693.21.1.el7.x86_64
+  OS Image:                   CentOS Linux 7 (Core)
+  Operating System:           linux
+  Architecture:               amd64
+  Container Runtime Version:  docker://20.10.11
+  Kubelet Version:            v1.22.4
+  Kube-Proxy Version:         v1.22.4
+PodCIDR:                      192.168.1.0/24
+PodCIDRs:                     192.168.1.0/24
+Non-terminated Pods:          (5 in total)
+  Namespace                   Name                                        CPU Requests  CPU Limits  Memory Requests  Memory Limits  Age
+  ---------                   ----                                        ------------  ----------  ---------------  -------------  ---
+  kube-system                 calico-kube-controllers-67bb5696f5-dwfmf    0 (0%)        0 (0%)      0 (0%)           0 (0%)         2d22h
+  kube-system                 calico-node-8xp57                           250m (12%)    0 (0%)      0 (0%)           0 (0%)         2d22h
+  kube-system                 coredns-7d89d9b6b8-766ml                    100m (5%)     0 (0%)      70Mi (1%)        170Mi (4%)     2d22h
+  kube-system                 coredns-7d89d9b6b8-qh4d8                    100m (5%)     0 (0%)      70Mi (1%)        170Mi (4%)     2d22h
+  kube-system                 kube-proxy-24np4                            0 (0%)        0 (0%)      0 (0%)           0 (0%)         2d22h
+Allocated resources:
+  (Total limits may be over 100 percent, i.e., overcommitted.)
+  Resource           Requests    Limits
+  --------           --------    ------
+  cpu                450m (22%)  0 (0%)
+  memory             140Mi (3%)  340Mi (9%)
+  ephemeral-storage  0 (0%)      0 (0%)
+  hugepages-1Gi      0 (0%)      0 (0%)
+  hugepages-2Mi      0 (0%)      0 (0%)
+Events:              <none>
+```
+
+一个创建pod的yaml文件内容，这个yaml定义的pod 应该会被调度到node2 节点，应为node1，master节点已经打了污点
+
+```yaml
+apiVersion: v1   # api版本
+kind: Pod   #资源类型
+metadata:  # 元数据
+  name: taint-pod  # 名字
+  namespace: default  # 命名空间
+  labels:   # 标签
+    tomcat:  tomcat-pod # 标签的键值对
+spec:
+  containers:   # 容器
+  - name:  taint-pod   # 容器名
+    ports:
+    - containerPort: 8080  # 暴露端口
+    image: tomcat:8.5-jre8-alpine   # 镜像
+    imagePullPolicy: IfNotPresent  # 镜像拉取规则
+
+
+```
+
+查看该yaml文件定义的对应pod
+
+```
+# luca @ luca in ~ [10:48:10] C:1
+$ kubectl apply -f /Users/luca/Documents/k8s-ops/yml/chpt10/pod-taint-no-tolerations.yaml
+pod/taint-pod created
+# luca @ luca in ~ [10:49:19]
+$ kubectl get pods   -o wide
+NAME        READY   STATUS    RESTARTS   AGE   IP               NODE    NOMINATED NODE   READINESS GATES
+taint-pod   1/1     Running   0          59s   192.168.104.21   node2   <none>           <none>
+
 ```
 
 

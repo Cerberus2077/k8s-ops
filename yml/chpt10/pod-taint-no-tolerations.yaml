@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: taint-pod
+  namespace: default
+  labels:
+    tomcat:  tomcat-pod
+spec:
+  containers:
+  - name:  taint-pod
+    ports:
+    - containerPort: 8080
+    image: tomcat:8.5-jre8-alpine
+    imagePullPolicy: IfNotPresent 
+
