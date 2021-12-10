@@ -944,7 +944,7 @@ pod-node-affinity-demo      1/1     Running   0          6m31s
 
 
 
-# pod高级用法：pod生命周期和健康监测
+# pod高级用法：node污点和pod容忍度
 
 ## 污点、容忍度
 
@@ -1915,6 +1915,10 @@ Taints:             node-type=prod:NoSchedule
 1. 专用node  特定的node给特定的应用使用，在使用亲和性配合使用
 2. 拥有特定硬件的node(gpu)
 
+
+
+# Pod 高级用法: pod的生命周期
+
 ## [pod状态和重启策略](https://kubernetes.io/zh/docs/concepts/workloads/pods/pod-lifecycle/)
 
 ### 常见的pod状态
@@ -1939,11 +1943,9 @@ Pod 的 `spec` 中包含一个 `restartPolicy` 字段，其可能取值包括 Al
 
 `restartPolicy` 适用于 Pod 中的所有容器。`restartPolicy` 仅针对同一节点上 `kubelet` 的容器重启动作。当 Pod 中的容器退出时，`kubelet` 会按指数回退 方式计算重启的延迟（10s、20s、40s、...），其最长延迟为 5 分钟。 一旦某容器执行了 10 分钟并且没有出现问题，`kubelet` 对该容器的重启回退计时器执行 重置操作。
 
-### Pod 的生命周期
-
 ​			 	![img](./pic/1395193-20200812220935447-1350637895.png)
 
-本页面讲述 Pod 的生命周期。 Pod 遵循一个预定义的生命周期，起始于 `Pending` [阶段](https://kubernetes.io/zh/docs/concepts/workloads/pods/pod-lifecycle/#pod-phase)，如果至少 其中有一个主要容器正常启动，则进入 `Running`，之后取决于 Pod 中是否有容器以 失败状态结束而进入 `Succeeded` 或者 `Failed` 阶段。
+Pod 遵循一个预定义的生命周期，起始于 `Pending` [阶段](https://kubernetes.io/zh/docs/concepts/workloads/pods/pod-lifecycle/#pod-phase)，如果至少 其中有一个主要容器正常启动，则进入 `Running`，之后取决于 Pod 中是否有容器以 失败状态结束而进入 `Succeeded` 或者 `Failed` 阶段。
 
 在 Pod 运行期间，`kubelet` 能够重启容器以处理一些失效场景。 在 Pod 内部，Kubernetes 跟踪不同容器的[状态](https://kubernetes.io/zh/docs/concepts/workloads/pods/pod-lifecycle/#container-states) 并确定使 Pod 重新变得健康所需要采取的动作。
 
@@ -2139,7 +2141,175 @@ FIELDS:
 
       在容器因 API 请求或者管理事件（诸如存活态探针、启动探针失败、资源抢占、资源竞争等） 而被终止之前，此回调会被调用。 如果容器已经处于已终止或者已完成状态，则对 preStop 回调的调用将失败。 在用来停止容器的 TERM 信号被发出之前，回调必须执行结束。 Pod 的终止宽限周期在 `PreStop` 回调被执行之前即开始计数，所以无论 回调函数的执行结果如何，容器最终都会在 Pod 的终止宽限期内被终止。 没有参数会被传递给处理程序。 
 
-   
+
+
+```bash
+$ kubectl explain pod.spec.containers.lifecycle
+KIND:     Pod
+VERSION:  v1
+
+RESOURCE: lifecycle <Object>
+
+DESCRIPTION:
+     Actions that the management system should take in response to container
+     lifecycle events. Cannot be updated.
+
+     Lifecycle describes actions that the management system should take in
+     response to container lifecycle events. For the PostStart and PreStop
+     lifecycle handlers, management of the container blocks until the action is
+     complete, unless the container process fails, in which case the handler is
+     aborted.
+
+FIELDS:
+   postStart	<Object>
+     PostStart is called immediately after a container is created. If the
+     handler fails, the container is terminated and restarted according to its
+     restart policy. Other management of the container blocks until the hook
+     completes. More info:
+     https://kubernetes.io/docs/concepts/containers/container-lifecycle-hooks/#container-hooks
+
+   preStop	<Object>
+     PreStop is called immediately before a container is terminated due to an
+     API request or management event such as liveness/startup probe failure,
+     preemption, resource contention, etc. The handler is not called if the
+     container crashes or exits. The reason for termination is passed to the
+     handler. The Pod's termination grace period countdown begins before the
+     PreStop hooked is executed. Regardless of the outcome of the handler, the
+     container will eventually terminate within the Pod's termination grace
+     period. Other management of the container blocks until the hook completes
+     or until the termination grace period is reached. More info:
+     https://kubernetes.io/docs/concepts/containers/container-lifecycle-hooks/#container-hooks
+# luca @ luca in ~/Documents/k8s-ops/yml/chpt10 on git:main x [15:37:58] C:1
+$ kubectl explain pod.spec.containers.lifecycle.preStop.httpGet
+KIND:     Pod
+VERSION:  v1
+
+RESOURCE: httpGet <Object>
+
+DESCRIPTION:
+     HTTPGet specifies the http request to perform.
+
+     HTTPGetAction describes an action based on HTTP Get requests.
+
+FIELDS:
+   host	<string>
+     Host name to connect to, defaults to the pod IP. You probably want to set
+     "Host" in httpHeaders instead.
+
+   httpHeaders	<[]Object>
+     Custom headers to set in the request. HTTP allows repeated headers.
+
+   path	<string>
+     Path to access on the HTTP server.
+
+   port	<string> -required-
+     Name or number of the port to access on the container. Number must be in
+     the range 1 to 65535. Name must be an IANA_SVC_NAME.
+
+   scheme	<string>
+     Scheme to use for connecting to the host. Defaults to HTTP.
+```
+
+pod-lifecyle.yaml 
+
+```yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: lifecycle-pod
+  namespace: default
+  labels:
+    tomcat:  tomcat-pod
+spec:
+  containers:
+  - name:  lifecycle-pod
+    ports:
+    - containerPort: 8080
+    image: tomcat:8.5-jre8-alpine
+    imagePullPolicy: IfNotPresent 
+    lifecycle:
+      postStart:  #启动之后把tomcatRUNNING.txt 拷贝到 /opt
+        exec:
+          command:
+            - "echo"
+            - "\"what a fuck day\""
+      preStop:  # 停止之前发送告警到监控平台
+        httpGet:
+          host: monitor.com
+          path: /waring
+          port: 8080
+          scheme: HTTP
+
+```
+
+应用该yaml，查看状态
+
+```bash
+# luca @ luca in ~/Documents/k8s-ops/yml/chpt10 on git:main x [15:48:06] 
+$ kubectl apply -f pod-lifecyle.yaml 
+pod/lifecycle-pod created
+
+# luca @ luca in ~/Documents/k8s-ops/yml/chpt10 on git:main x [15:48:24] 
+$ kubectl get pods  -o wide 
+NAME            READY   STATUS    RESTARTS   AGE   IP               NODE    NOMINATED NODE   READINESS GATES
+lifecycle-pod   1/1     Running   0          4s    192.168.104.30   node2   <none>           <none>
+taint-pod       1/1     Running   0          26m   192.168.104.28   node2   <none>           <none>
+
+# luca @ luca in ~/Documents/k8s-ops/yml/chpt10 on git:main x [15:48:28] 
+$ kubectl describe pods lifecycle-pod                                    
+Name:         lifecycle-pod
+Namespace:    default
+Priority:     0
+Node:         node2/192.168.0.110
+Start Time:   Fri, 10 Dec 2021 15:48:24 +0800
+Labels:       tomcat=tomcat-pod
+Annotations:  cni.projectcalico.org/podIP: 192.168.104.30/32
+              cni.projectcalico.org/podIPs: 192.168.104.30/32
+Status:       Running
+IP:           192.168.104.30
+IPs:
+  IP:  192.168.104.30
+Containers:
+  lifecycle-pod:
+    Container ID:   docker://e8b046d32ec1c29f189c09a324bfb0036249802c5c6007db8464fdc5d260c6a7
+    Image:          tomcat:8.5-jre8-alpine
+    Image ID:       docker://sha256:8b8b1eb786b54145731e1cd36e1de208d10defdbb0b707617c3e7ddb9d6d99c8
+    Port:           8080/TCP
+    Host Port:      0/TCP
+    State:          Running
+      Started:      Fri, 10 Dec 2021 15:48:26 +0800
+    Ready:          True
+    Restart Count:  0
+    Environment:    <none>
+    Mounts:
+      /var/run/secrets/kubernetes.io/serviceaccount from kube-api-access-57bkb (ro)
+Conditions:
+  Type              Status
+  Initialized       True 
+  Ready             True 
+  ContainersReady   True 
+  PodScheduled      True 
+Volumes:
+  kube-api-access-57bkb:
+    Type:                    Projected (a volume that contains injected data from multiple sources)
+    TokenExpirationSeconds:  3607
+    ConfigMapName:           kube-root-ca.crt
+    ConfigMapOptional:       <nil>
+    DownwardAPI:             true
+QoS Class:                   BestEffort
+Node-Selectors:              <none>
+Tolerations:                 node.kubernetes.io/not-ready:NoExecute op=Exists for 300s
+                             node.kubernetes.io/unreachable:NoExecute op=Exists for 300s
+Events:
+  Type    Reason     Age   From               Message
+  ----    ------     ----  ----               -------
+  Normal  Scheduled  13s   default-scheduler  Successfully assigned default/lifecycle-pod to node2
+  Normal  Pulled     12s   kubelet            Container image "tomcat:8.5-jre8-alpine" already present on machine
+  Normal  Created    12s   kubelet            Created container lifecycle-pod
+  Normal  Started    12s   kubelet            Started container lifecycle-pod
+```
+
+
 
 ### Pod 生命期 
 
@@ -2152,6 +2322,26 @@ Pod 自身不具有自愈能力。如果 Pod 被调度到某[节点](https://kub
 任何给定的 Pod （由 UID 定义）从不会被“重新调度（rescheduled）”到不同的节点； 相反，这一 Pod 可以被一个新的、几乎完全相同的 Pod 替换掉。 如果需要，新 Pod 的名字可以不变，但是其 UID 会不同。
 
 如果某物声称其生命期与某 Pod 相同，例如存储[卷](https://kubernetes.io/zh/docs/concepts/storage/volumes/)， 这就意味着该对象在此 Pod （UID 亦相同）存在期间也一直存在。 如果 Pod 因为任何原因被删除，甚至某完全相同的替代 Pod 被创建时， 这个相关的对象（例如这里的卷）也会被删除并重建。
+
+### pod 创建的阶段
+
+1. 自主pod（kind: pod）
+
+   ![img](./pic/0*r3DyRvMZJ_LUC9w4.png)
+
+   ​                           
+
+   当用户创建 pod 时，这个请求给 apiserver，apiserver 把创建请求的状态保存在 etcd 中; 接下来 apiserver 会请求 scheduler 来完成调度，如果调度成功，会把调度的结果(如调度到哪个
+   节点上了，运行在哪个节点上了，把它更新到 etcd 的 pod 资源状态中)保存在 etcd 中，一旦存到 etcd 中并且完成更新以后，如调度到 node1 上，那么 node1 节点上的 kubelet 通过 apiserver 当中的状态变化知道有一些任务被执行了，所以此时此 kubelet 会拿到用户创建时所提交的 清单，这个清单会在当前节点上运行或者启动这个 pod，如果创建成功或者失败会有一个当前状态，当 前这个状态会发给 apiserver，apiserver 在存到 etcd 中;在这个过程中，etcd 和 apiserver 一直在打 交道，不停的交互，scheduler 也参与其中，负责调度 pod 到合适的 node 节点上，这个就是 pod 的创 建过程
+   pod 在整个生命周期中有非常多的用户行为:
+   1、初始化容器完成初始化
+   2、主容器启动后可以做启动后钩子
+   3、主容器结束前可以做结束前钩子
+   4、在主容器运行中可以做一些健康检测，如 `liveness probe`，`readness probe`，`startupProbe`
+
+   
+
+# pod高级用法:  pod 容器探针深度讲解
 
 ### pod健康监测
 
@@ -2170,7 +2360,9 @@ Pod 自身不具有自愈能力。如果 Pod 被调度到某[节点](https://kub
 针对运行中的容器，`kubelet` 可以选择是否执行以下三种探针，以及如何针对探测结果作出反应：
 
 - `livenessProbe`：指示容器是否正在运行。如果存活态探测失败，则 kubelet 会杀死容器， 并且容器将根据其[重启策略](https://kubernetes.io/zh/docs/concepts/workloads/pods/pod-lifecycle/#restart-policy)决定未来。如果容器不提供存活探针， 则默认状态为 `Success`。
+  - 许多应用长时间运行最终过度到无法运行的状态，除了重启，无法恢复。同行强况下，k8s会发现应用程序已经终止，然后重启应用程序pod，有事应用程序因为某些原因导致暂时无法对外提供服务，但是应用软件没有终止，导致k8s无法隔离有故障的pod，调用者可能会访问到有故障的pod，导致业务运行不稳定。k8s提供 livenessprobe来监测应用程序是否正常运行，并且对相应的情况进行补救。
 - `readinessProbe`：指示容器是否准备好为请求提供服务。如果就绪态探测失败， 端点控制器将从与 Pod 匹配的所有服务的端点列表中删除该 Pod 的 IP 地址。 初始延迟之前的就绪态的状态值默认为 `Failure`。 如果容器不提供就绪态探针，则默认状态为 `Success`。
+  -  在没有配置readinessProbe的资源对象中，pod中的容器启动完成后，就认为pod中的应用程序可以对外提供服务，该pod会加入相对应的service，对外提供服务，但有时一些容器启动后需要经过较长时间的加载，才能对外提供服务，这时候如果对外提供服务，执行结果必然无法达到预期，并且影响用户体验。比如tomcat应用程序并不是简单的tomcat 启动就可以对外提供服务，还需要等待spring容器初始化，连接上数据库等。。。 
 - `startupProbe`: 指示容器中的应用是否已经启动。如果提供了启动探针，则所有其他探针都会被 禁用，直到此探针成功为止。如果启动探测失败，`kubelet` 将杀死容器，而容器依其 [重启策略](https://kubernetes.io/zh/docs/concepts/workloads/pods/pod-lifecycle/#restart-policy)进行重启。 如果容器没有提供启动探测，则默认状态为 `Success`。
 
 
@@ -2207,20 +2399,327 @@ Pod 自身不具有自愈能力。如果 Pod 被调度到某[节点](https://kub
 
 如果你的容器启动时间通常超出 `initialDelaySeconds + failureThreshold × periodSeconds` 总值，你应该设置一个启动探测，对存活态探针所使用的同一端点执行检查。 `periodSeconds` 的默认值是 10 秒。你应该将其 `failureThreshold` 设置得足够高， 以便容器有充足的时间完成启动，并且避免更改存活态探针所使用的默认值。 这一设置有助于减少死锁状况的发生。
 
-### pod 创建的阶段
+具体用法如下
 
-1. 自主pod（kind: pod）
+```bash
+$ kubectl explain pod.spec.containers.livenessProbe
+KIND:     Pod
+VERSION:  v1
 
-   ![img](./pic/0*r3DyRvMZJ_LUC9w4.png)
+RESOURCE: livenessProbe <Object>
 
-   ​                           
+DESCRIPTION:
+     Periodic probe of container liveness. Container will be restarted if the
+     probe fails. Cannot be updated. More info:
+     https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle#container-probes
 
-   当用户创建 pod 时，这个请求给 apiserver，apiserver 把创建请求的状态保存在 etcd 中; 接下来 apiserver 会请求 scheduler 来完成调度，如果调度成功，会把调度的结果(如调度到哪个
-   节点上了，运行在哪个节点上了，把它更新到 etcd 的 pod 资源状态中)保存在 etcd 中，一旦存到 etcd 中并且完成更新以后，如调度到 node1 上，那么 node1 节点上的 kubelet 通过 apiserver 当中的状态变化知道有一些任务被执行了，所以此时此 kubelet 会拿到用户创建时所提交的 清单，这个清单会在当前节点上运行或者启动这个 pod，如果创建成功或者失败会有一个当前状态，当 前这个状态会发给 apiserver，apiserver 在存到 etcd 中;在这个过程中，etcd 和 apiserver 一直在打 交道，不停的交互，scheduler 也参与其中，负责调度 pod 到合适的 node 节点上，这个就是 pod 的创 建过程
-   pod 在整个生命周期中有非常多的用户行为:
-   1、初始化容器完成初始化
-   2、主容器启动后可以做启动后钩子
-   3、主容器结束前可以做结束前钩子
-   4、在主容器运行中可以做一些健康检测，如 `liveness probe`，`readness probe`，`startupProbe`
+     Probe describes a health check to be performed against a container to
+     determine whether it is alive or ready to receive traffic.
 
-   
+FIELDS:
+   exec	<Object>
+     One and only one of the following should be specified. Exec specifies the
+     action to take.
+
+   failureThreshold	<integer> # 探测失败的充实次数，重试一定的次数之后视为失败
+     Minimum consecutive failures for the probe to be considered failed after
+     having succeeded. Defaults to 3. Minimum value is 1.
+
+   httpGet	<Object>
+     HTTPGet specifies the http request to perform.
+
+   initialDelaySeconds	<integer>   #容器启动之后多少秒进行存活探测
+     Number of seconds after the container has started before liveness probes
+     are initiated. More info:
+     https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle#container-probes
+
+   periodSeconds	<integer>  # 检查间隔
+     How often (in seconds) to perform the probe. Default to 10 seconds. Minimum
+     value is 1.
+
+   successThreshold	<integer>  #失败之后多少次成功状态视为状态健康
+     Minimum consecutive successes for the probe to be considered successful
+     after having failed. Defaults to 1. Must be 1 for liveness and startup.
+     Minimum value is 1.
+
+   tcpSocket	<Object>  # tcp 端口监测
+     TCPSocket specifies an action involving a TCP port. TCP hooks not yet
+     supported
+
+   terminationGracePeriodSeconds	<integer>
+     Optional duration in seconds the pod needs to terminate gracefully upon
+     probe failure. The grace period is the duration in seconds after the
+     processes running in the pod are sent a termination signal and the time
+     when the processes are forcibly halted with a kill signal. Set this value
+     longer than the expected cleanup time for your process. If this value is
+     nil, the pod's terminationGracePeriodSeconds will be used. Otherwise, this
+     value overrides the value provided by the pod spec. Value must be
+     non-negative integer. The value zero indicates stop immediately via the
+     kill signal (no opportunity to shut down). This is a beta field and
+     requires enabling ProbeTerminationGracePeriod feature gate. Minimum value
+     is 1. spec.terminationGracePeriodSeconds is used if unset.
+
+   timeoutSeconds	<integer>  # 多少秒之后视为超时
+     Number of seconds after which the probe times out. Defaults to 1 second.
+     Minimum value is 1. More info:
+     https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle#container-probes
+```
+
+   ReadinessProbe 和LivenessProbe的可以使用相同的探测方式，对pod的处置方式不同
+
+1. ReadinessProbe 当监测失败后，将pod的ip和port 从对应的EndPoint列表中删除[service 提供服务的列表]
+2. LivenessProbe 当监测失败后，会傻子容器并且根据Pod重启策略来绝地个作出相对应的措施
+
+## liveness探针exec例子
+
+```yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  labels:
+    test: liveness
+  name: liveness-exec
+spec:
+  containers:
+  - name: liveness
+    image: registry.cn-hangzhou.aliyuncs.com/google_containers/busybox
+    args:
+    - /bin/sh
+    - -c
+    - touch /tmp/healthy; sleep 30; rm -rf /tmp/healthy; sleep 60
+    livenessProbe:
+      exec:
+        command:
+        - cat
+        - /tmp/healthy
+      initialDelaySeconds: 5
+      periodSeconds: 5
+
+
+```
+
+在这个配置文件中，可以看到 Pod 中只有一个容器。 `periodSeconds` 字段指定了 kubelet 应该每 5 秒执行一次存活探测。 `initialDelaySeconds` 字段告诉 kubelet 在执行第一次探测前应该等待 5 秒。 kubelet 在容器内执行命令 `cat /tmp/healthy` 来进行探测。 如果命令执行成功并且返回值为 0，kubelet 就会认为这个容器是健康存活的。 如果这个命令返回非 0 值，kubelet 会杀死这个容器并重新启动它。
+
+```bash
+
+# luca @ luca in ~/Documents/k8s-ops/yml/chpt10 on git:main x [16:44:51] 
+$ kubectl apply -f exec-liveness-prob.yaml               
+pod/liveness-exec created
+$ kubectl get pods  -o wide
+NAME            READY   STATUS    RESTARTS   AGE   IP               NODE    NOMINATED NODE   READINESS GATES
+liveness-exec   1/1     Running   0          10s   192.168.104.37   node2   <none>           <none>
+taint-pod       1/1     Running   0          99m   192.168.104.28   node2   <none>           <none>
+# luca @ luca in ~/Documents/k8s-ops/yml/chpt10 on git:main x [17:17:10]
+$ kubectl describe pods liveness-exec
+Name:         liveness-exec
+Namespace:    default
+Priority:     0
+Node:         node2/192.168.0.110
+Start Time:   Fri, 10 Dec 2021 17:06:44 +0800
+Labels:       test=liveness
+Annotations:  cni.projectcalico.org/podIP: 192.168.104.38/32
+              cni.projectcalico.org/podIPs: 192.168.104.38/32
+Status:       Running
+IP:           192.168.104.38
+IPs:
+  IP:  192.168.104.38
+Containers:
+  liveness:
+    Container ID:  docker://575f688cecc84b8655799bd661a8d5282a88c76f059cb36d3ef0a5ea0c45f5bb
+    Image:         registry.cn-hangzhou.aliyuncs.com/google_containers/busybox
+    Image ID:      docker-pullable://registry.cn-hangzhou.aliyuncs.com/google_containers/busybox@sha256:d8d3bc2c183ed2f9f10e7258f84971202325ee6011ba137112e01e30f206de67
+    Port:          <none>
+    Host Port:     <none>
+    Args:
+      /bin/sh
+      -c
+      touch /tmp/healthy; sleep 30; rm -rf /tmp/healthy; sleep 60
+    State:          Running
+      Started:      Fri, 10 Dec 2021 17:17:00 +0800
+    Last State:     Terminated
+      Reason:       Error
+      Exit Code:    137
+      Started:      Fri, 10 Dec 2021 17:15:45 +0800
+      Finished:     Fri, 10 Dec 2021 17:16:59 +0800
+    Ready:          True
+    Restart Count:  7
+    Liveness:       exec [cat /tmp/healthy] delay=5s timeout=1s period=5s #success=1 #failure=3
+    Environment:    <none>
+    Mounts:
+      /var/run/secrets/kubernetes.io/serviceaccount from kube-api-access-qz6sn (ro)
+Conditions:
+  Type              Status
+  Initialized       True
+  Ready             True
+  ContainersReady   True
+  PodScheduled      True
+Volumes:
+  kube-api-access-qz6sn:
+    Type:                    Projected (a volume that contains injected data from multiple sources)
+    TokenExpirationSeconds:  3607
+    ConfigMapName:           kube-root-ca.crt
+    ConfigMapOptional:       <nil>
+    DownwardAPI:             true
+QoS Class:                   BestEffort
+Node-Selectors:              <none>
+Tolerations:                 node.kubernetes.io/not-ready:NoExecute op=Exists for 300s
+                             node.kubernetes.io/unreachable:NoExecute op=Exists for 300s
+Events:
+  Type     Reason     Age                    From               Message
+  ----     ------     ----                   ----               -------
+  Normal   Scheduled  10m                    default-scheduler  Successfully assigned default/liveness-exec to node2
+  Normal   Pulled     10m                    kubelet            Successfully pulled image "registry.cn-hangzhou.aliyuncs.com/google_containers/busybox" in 674.887568ms
+  Normal   Pulled     9m21s                  kubelet            Successfully pulled image "registry.cn-hangzhou.aliyuncs.com/google_containers/busybox" in 739.679987ms
+  Normal   Created    8m7s (x3 over 10m)     kubelet            Created container liveness
+  Normal   Pulled     8m7s                   kubelet            Successfully pulled image "registry.cn-hangzhou.aliyuncs.com/google_containers/busybox" in 667.773107ms
+  Warning  Unhealthy  7m22s (x9 over 10m)    kubelet            Liveness probe failed: cat: can't open '/tmp/healthy': No such file or directory
+  Normal   Killing    7m22s (x3 over 9m52s)  kubelet            Container liveness failed liveness probe, will be restarted
+  Normal   Started    5m36s (x5 over 10m)    kubelet            Started container liveness
+  Normal   Pulling    22s (x8 over 10m)      kubelet            Pulling image "registry.cn-hangzhou.aliyuncs.com/google_containers/busybox"
+
+# luca @ luca in ~/Documents/k8s-ops/yml/chpt10 on git:main x [17:17:21]
+$ kubectl get pod liveness-exec
+NAME            READY   STATUS             RESTARTS      AGE
+liveness-exec   0/1     CrashLoopBackOff   7 (50s ago)   12m
+
+```
+
+可以看到容器被重启了七次，然后crash了。
+
+## liveness探针httpget例子
+
+
+
+```yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  labels:
+    test: liveness
+  name: liveness-http
+spec:
+  containers:
+  - name: liveness
+    image: mydlqclub/springboot-helloworld:0.0.1
+    livenessProbe:
+      httpGet:
+        path: /actuator/health
+        port: 8081
+      initialDelaySeconds: 3
+      periodSeconds: 3
+      
+
+```
+
+应用yaml文件
+
+```bash
+$ kubectl apply -f httpGet-liveness-prob.yaml 
+pod/liveness-http created
+
+```
+
+在这个配置文件中，可以看到 Pod 也只有一个容器。 `periodSeconds` 字段指定了 kubelet 每隔 3 秒执行一次存活探测。 `initialDelaySeconds` 字段告诉 kubelet 在执行第一次探测前应该等待 3 秒。 kubelet 会向容器内运行的服务（服务会监听 8080 端口）发送一个 HTTP GET 请求来执行探测。 如果服务器上 `/healthz` 路径下的处理程序返回成功代码，则 kubelet 认为容器是健康存活的。 如果处理程序返回失败代码，则 kubelet 会杀死这个容器并且重新启动它。
+
+任何大于或等于 200 并且小于 400 的返回代码标示成功，其它返回代码都标示失败。
+
+可以在这里看服务的源码 [hello-world-spring-boot)](https://github.com/ragsns/hello-world-spring-boot)。
+
+容器存活的最开始 10 秒中，`/healthz` 处理程序返回一个 200 的状态码。之后处理程序返回 500 的状态码。
+
+```bash
+# luca @ luca in ~/Documents/k8s-ops/yml/chpt10 on git:main x [21:19:36] C:1
+$ kubectl get pod
+NAME            READY   STATUS    RESTARTS   AGE
+liveness-http   1/1     Running   0          33s
+
+# luca @ luca in ~/Documents/k8s-ops/yml/chpt10 on git:main x [21:23:02]
+$ kubectl describe pod liveness-http
+Name:         liveness-http
+Namespace:    default
+Priority:     0
+Node:         node2/192.168.0.110
+Start Time:   Fri, 10 Dec 2021 21:22:30 +0800
+Labels:       test=liveness
+Annotations:  cni.projectcalico.org/podIP: 192.168.104.43/32
+              cni.projectcalico.org/podIPs: 192.168.104.43/32
+Status:       Running
+IP:           192.168.104.43
+IPs:
+  IP:  192.168.104.43
+Containers:
+  liveness:
+    Container ID:   docker://aba6fa23b1e24c23d1fc0963db2ababbcfeb546c2c7e8203174cd6031b489f47
+    Image:          mydlqclub/springboot-helloworld:0.0.1
+    Image ID:       docker-pullable://mydlqclub/springboot-helloworld@sha256:4ab2090669e655768687f4b1fc7c9906c6732e173f9201be434e9b725bc711f1
+    Port:           <none>
+    Host Port:      <none>
+    State:          Running
+      Started:      Fri, 10 Dec 2021 21:22:31 +0800
+    Ready:          True
+    Restart Count:  0
+    Liveness:       http-get http://:8081/actuator/health delay=3s timeout=10s period=3s #success=1 #failure=3
+    Environment:    <none>
+    Mounts:
+      /var/run/secrets/kubernetes.io/serviceaccount from kube-api-access-4hdzk (ro)
+Conditions:
+  Type              Status
+  Initialized       True
+  Ready             True
+  ContainersReady   True
+  PodScheduled      True
+Volumes:
+  kube-api-access-4hdzk:
+    Type:                    Projected (a volume that contains injected data from multiple sources)
+    TokenExpirationSeconds:  3607
+    ConfigMapName:           kube-root-ca.crt
+    ConfigMapOptional:       <nil>
+    DownwardAPI:             true
+QoS Class:                   BestEffort
+Node-Selectors:              <none>
+Tolerations:                 node.kubernetes.io/not-ready:NoExecute op=Exists for 300s
+                             node.kubernetes.io/unreachable:NoExecute op=Exists for 300s
+Events:
+  Type     Reason     Age                From               Message
+  ----     ------     ----               ----               -------
+  Normal   Scheduled  43s                default-scheduler  Successfully assigned default/liveness-http to node2
+  Normal   Pulled     43s                kubelet            Container image "mydlqclub/springboot-helloworld:0.0.1" already present on machine
+  Normal   Created    43s                kubelet            Created container liveness
+  Normal   Started    43s                kubelet            Started container liveness
+  Warning  Unhealthy  35s (x2 over 38s)  kubelet            Liveness probe failed: Get "http://192.168.104.43:8081/actuator/health": dial tcp 192.168.104.43:8081: connect: connection refused
+
+# luca @ luca in ~/Documents/k8s-ops/yml/chpt10 on git:main x [21:23:14]
+$ kubectl logs -f   liveness-http liveness
+
+  .   ____          _            __ _ _
+ /\\ / ___'_ __ _ _(_)_ __  __ _ \ \ \ \
+( ( )\___ | '_ | '_| | '_ \/ _` | \ \ \ \
+ \\/  ___)| |_)| | | | | || (_| |  ) ) ) )
+  '  |____| .__|_| |_|_| |_\__, | / / / /
+ =========|_|==============|___/=/_/_/_/
+ :: Spring Boot ::        (v2.1.4.RELEASE)
+
+2021-12-10 21:22:33.817  INFO 1 --- [           main] c.mydlq.springboothelloword.Application  : Starting Application v0.0.1 on liveness-http with PID 1 (/app.jar started by root in /)
+2021-12-10 21:22:33.826  INFO 1 --- [           main] c.mydlq.springboothelloword.Application  : No active profile set, falling back to default profiles: default
+2021-12-10 21:22:37.327  INFO 1 --- [           main] o.s.b.w.embedded.tomcat.TomcatWebServer  : Tomcat initialized with port(s): 8080 (http)
+2021-12-10 21:22:37.417  INFO 1 --- [           main] o.apache.catalina.core.StandardService   : Starting service [Tomcat]
+2021-12-10 21:22:37.418  INFO 1 --- [           main] org.apache.catalina.core.StandardEngine  : Starting Servlet engine: [Apache Tomcat/9.0.17]
+2021-12-10 21:22:37.621  INFO 1 --- [           main] o.a.c.c.C.[Tomcat].[localhost].[/]       : Initializing Spring embedded WebApplicationContext
+2021-12-10 21:22:37.621  INFO 1 --- [           main] o.s.web.context.ContextLoader            : Root WebApplicationContext: initialization completed in 3669 ms
+2021-12-10 21:22:38.422  INFO 1 --- [           main] o.s.s.concurrent.ThreadPoolTaskExecutor  : Initializing ExecutorService 'applicationTaskExecutor'
+2021-12-10 21:22:39.531  INFO 1 --- [           main] o.s.b.w.embedded.tomcat.TomcatWebServer  : Tomcat initialized with port(s): 8081 (http)
+2021-12-10 21:22:39.533  INFO 1 --- [           main] o.apache.catalina.core.StandardService   : Starting service [Tomcat]
+2021-12-10 21:22:39.533  INFO 1 --- [           main] org.apache.catalina.core.StandardEngine  : Starting Servlet engine: [Apache Tomcat/9.0.17]
+2021-12-10 21:22:39.540  INFO 1 --- [           main] o.a.c.c.C.[Tomcat-1].[localhost].[/]     : Initializing Spring embedded WebApplicationContext
+2021-12-10 21:22:39.540  INFO 1 --- [           main] o.s.web.context.ContextLoader            : Root WebApplicationContext: initialization completed in 177 ms
+2021-12-10 21:22:39.624  INFO 1 --- [           main] o.s.b.a.e.web.EndpointLinksResolver      : Exposing 15 endpoint(s) beneath base path '/actuator'
+2021-12-10 21:22:39.812  INFO 1 --- [           main] o.s.b.w.embedded.tomcat.TomcatWebServer  : Tomcat started on port(s): 8081 (http) with context path ''
+2021-12-10 21:22:39.840  INFO 1 --- [           main] o.s.b.w.embedded.tomcat.TomcatWebServer  : Tomcat started on port(s): 8080 (http) with context path ''
+2021-12-10 21:22:39.841  INFO 1 --- [           main] c.mydlq.springboothelloword.Application  : Started Application in 7.573 seconds (JVM running for 8.413)
+2021-12-10 21:22:42.397  INFO 1 --- [nio-8081-exec-1] o.a.c.c.C.[Tomcat-1].[localhost].[/]     : Initializing Spring DispatcherServlet 'dispatcherServlet'
+2021-12-10 21:22:42.397  INFO 1 --- [nio-8081-exec-1] o.s.web.servlet.DispatcherServlet        : Initializing Servlet 'dispatcherServlet'
+2021-12-10 21:22:42.418  INFO 1 --- [nio-8081-exec-1] o.s.web.servlet.DispatcherServlet        : Completed initialization in 20 ms
+```
+
+## liveness探针tcp例子
+

@@ -1,0 +1,26 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: lifecycle-pod
+  namespace: default
+  labels:
+    tomcat:  tomcat-pod
+spec:
+  containers:
+  - name:  lifecycle-pod
+    ports:
+    - containerPort: 8080
+    image: tomcat:8.5-jre8-alpine
+    imagePullPolicy: IfNotPresent 
+    lifecycle:
+      postStart:  #启动之后把tomcatRUNNING.txt 拷贝到 /opt
+        exec:
+          command:
+            - "echo"
+            - "\"what a fuck day\""
+      preStop:  # 停止之前发送告警到监控平台
+        httpGet:
+          host: monitor.com
+          path: /waring
+          port: 8080
+          scheme: HTTP

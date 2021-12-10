@@ -1,0 +1,22 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: liveness-tcp
+  labels:
+    app: liveness-tcp
+spec:
+  containers:
+  - name: liveness-tcp
+    image: nginx
+    ports:
+    - containerPort: 80
+    readinessProbe:  #服务可用检测
+      tcpSocket:
+        port: 80
+      initialDelaySeconds: 5
+      periodSeconds: 10
+    livenessProbe: #容器可用检测
+      tcpSocket:
+        port: 80
+      initialDelaySeconds: 15  #15秒后开始检测
+      periodSeconds: 20  # 时间间隔20秒
