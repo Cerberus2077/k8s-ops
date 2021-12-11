@@ -1,0 +1,25 @@
+kind: Deployment
+apiVersion: apps/v1
+metadata:
+  name: nginx
+  namespace: default
+  labels: 
+    k8s-app: nginx
+spec:
+  selector:
+    matchLabels:
+      k8s-app: nginx
+  replicas: 2
+  template:
+    metadata:
+      labels:
+        k8s-app: nginx
+    spec:
+      containers:
+      - name: nginx
+        image:  docker.io/nginx:latest
+        imagePullPolicy: IfNotPresent  
+        ports:
+        - containerPort: 80
+          protocol: TCP
+

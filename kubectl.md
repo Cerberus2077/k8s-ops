@@ -775,3 +775,424 @@ mysql   2/2     2            2           7m47s   k8s-app=mysql
 
 ## 使用kubectl管理集群
 
+`kubectl edit`  编辑服务器侧的资源
+
+`kubectl replace` 替换，使用yaml配置文件替换正在运行的配置参数
+
+`kubectl path` 部分更新资源相关信息
+
+ `kubectl apply` 使用文件或者标准输入更改配置
+
+`kubectl scale` 设定 Deployment，ReplicaSet，RC的size
+
+`kubectl autoscale` Deployment，ReplicaSet，RC的自动扩展
+
+`kubectl cordon`  设定node不可用
+
+`kubectl uncordon`  设定node可以使用
+
+`kubectl drain`  设定node进入维护节点
+
+
+
+
+
+### kubectl edit 演示
+
+更新[nginx-deployment.yaml](./yml/chpt11/nginx-deployment.yaml) 和 [nginx-svc.yaml](./yml/chpt11/nginx-svc.yaml) 两个yaml文件
+
+```yaml
+# luca @ luca in ~/Documents/k8s-ops/yml/chpt11 on git:main x [14:48:20] 
+$ kubectl apply -f nginx-svc.yaml                    
+service/nginx created
+
+# luca @ luca in ~/Documents/k8s-ops/yml/chpt11 on git:main x [14:48:55] 
+$ kubectl apply -f nginx-deployment.yaml 
+deployment.apps/nginx created
+
+# luca @ luca in ~/Documents/k8s-ops/yml/chpt11 on git:main x [14:49:00] 
+$ kubectl get rs                        
+NAME               DESIRED   CURRENT   READY   AGE
+nginx-54d66fc654   2         2         2       16s
+
+# luca @ luca in ~/Documents/k8s-ops/yml/chpt11 on git:main x [14:49:17] 
+$ kubectl get rs -o wide
+NAME               DESIRED   CURRENT   READY   AGE   CONTAINERS   IMAGES                   SELECTOR
+nginx-54d66fc654   2         2         2       24s   nginx        docker.io/nginx:latest   k8s-app=nginx,pod-template-hash=54d66fc654
+# luca @ luca in ~ [14:53:20]
+$ kubectl get deploy
+NAME    READY   UP-TO-DATE   AVAILABLE   AGE
+nginx   2/2     2            2           4m26s
+
+# luca @ luca in ~ [14:53:27]
+$ kubectl get svc
+NAME         TYPE        CLUSTER-IP      EXTERNAL-IP   PORT(S)          AGE
+kubernetes   ClusterIP   10.96.0.1       <none>        443/TCP          4d3h
+nginx        NodePort    10.111.45.143   <none>        3000:31001/TCP   4m37s
+[root@master1 ~]# curl master1:31001
+<!DOCTYPE html>
+<html>
+<head>
+<title>Welcome to nginx!</title>
+<style>
+    body {
+        width: 35em;
+        margin: 0 auto;
+        font-family: Tahoma, Verdana, Arial, sans-serif;
+    }
+</style>
+</head>
+<body>
+<h1>Welcome to nginx!</h1>
+<p>If you see this page, the nginx web server is successfully installed and
+working. Further configuration is required.</p>
+
+<p>For online documentation and support please refer to
+<a href="http://nginx.org/">nginx.org</a>.<br/>
+Commercial support is available at
+<a href="http://nginx.com/">nginx.com</a>.</p>
+
+<p><em>Thank you for using nginx.</em></p>
+</body>
+</html>
+```
+
+```shell
+# luca @ luca in ~ [14:57:50] C:130
+$ kubectl get svc
+NAME         TYPE        CLUSTER-IP      EXTERNAL-IP   PORT(S)          AGE
+kubernetes   ClusterIP   10.96.0.1       <none>        443/TCP          4d3h
+nginx        NodePort    10.111.45.143   <none>        3000:31001/TCP   9m13s
+
+# luca @ luca in ~ [14:58:09]
+$ kubectl edit svc nginx
+ - nodePort: 30150  # 修改此处
+    port: 3000
+    protocol: TCP
+    targetPort: 80
+  selector:
+    k8s-app: nginx
+
+# luca @ luca in ~ [15:05:06]
+$ kubectl get svc
+NAME         TYPE        CLUSTER-IP      EXTERNAL-IP   PORT(S)          AGE
+kubernetes   ClusterIP   10.96.0.1       <none>        443/TCP          4d3h
+nginx        NodePort    10.111.45.143   <none>        3000:30150/TCP   16m
+
+```
+
+
+
+可以看到修改之后即刻生效
+
+### kebectl replace 演示
+
+```yaml
+kind: Service
+apiVersion: v1
+metadata:
+  name: nginx
+  labels:
+    k8s-app: nginx
+spec:
+  type: NodePort
+  ports:
+  - protocol: TCP
+    nodePort: 30151
+    targetPort: 80
+    port: 3000
+  selector:
+    k8s-app: nginx
+
+```
+
+```shell
+# luca @ luca in ~/Documents/k8s-ops/yml/chpt11 on git:main x [16:38:31] C:130
+$ kubectl replace -f nginx-svc.yaml                                              
+service/nginx replaced
+
+# luca @ luca in ~/Documents/k8s-ops/yml/chpt11 on git:main x [16:38:49] 
+$ kubectl get svc                  
+NAME         TYPE        CLUSTER-IP      EXTERNAL-IP   PORT(S)          AGE
+kubernetes   ClusterIP   10.96.0.1       <none>        443/TCP          4d4h
+nginx        NodePort    10.111.45.143   <none>        3000:30151/TCP   109m
+```
+
+### kebectl patch 演示
+
+```shell
+# luca @ luca in ~ [16:47:38] C:1
+$ kubectl patch pod nginx-54d66fc654-pq6t8 -p '{"spec":{"containers":[{"name":"nginx","images":"richarvey/nginx-php-fpm:latest"}]}}'
+
+pod/nginx-54d66fc654-pq6t8 patched (no change)
+```
+
+### kubectl scale 演示
+
+```shell
+
+# luca @ luca in ~ [17:08:40]
+$ kubectl scale --current-replicas=2 --replicas=3 deployment/nginx
+deployment.apps/nginx scaled
+
+# luca @ luca in ~ [17:09:19]
+$ kubectl get deploy
+NAME    READY   UP-TO-DATE   AVAILABLE   AGE
+nginx   3/3     3            3           140m
+
+# luca @ luca in ~ [17:09:23]
+$ kubectl get pod
+NAME                     READY   STATUS    RESTARTS   AGE
+nginx-54d66fc654-544xx   1/1     Running   0          11s
+nginx-54d66fc654-pq6t8   1/1     Running   0          140m
+nginx-54d66fc654-xnm9b   1/1     Running   0          140m
+```
+
+### kubectl autoscale 演示
+
+最大副本数5 最小副本数2
+
+```shell
+# luca @ luca in ~ [17:09:30]
+$ kubectl autoscale deployment nginx --min=2 --max=5
+horizontalpodautoscaler.autoscaling/nginx autoscaled
+
+```
+
+### kubectl cordon 演示
+
+在实际维护中会出现某个node坏掉或者做一些处理，暂时不让生成pod再某node上运行，需要通知kubernetes让其不要创建过来，这条命令就是cordon，uncordon则是取消这个要求。
+
+![image-20211211172305598](./pic/image-20211211172305598.png)
+
+```shell
+# luca @ luca in ~ [17:12:40]
+$ kubectl cordon node2
+node/node2 cordoned
+
+# luca @ luca in ~ [17:22:23]
+$ kubectl get node -o wide
+NAME     STATUS                     ROLES                  AGE    VERSION   INTERNAL-IP      EXTERNAL-IP   OS-IMAGE                KERNEL-VERSION               CONTAINER-RUNTIME
+master   Ready                      control-plane,master   4d5h   v1.22.4   122.114.50.242   <none>        CentOS Linux 7 (Core)   3.10.0-693.21.1.el7.x86_64   docker://20.10.11
+node1    Ready                      worker                 4d5h   v1.22.4   192.168.247.34   <none>        CentOS Linux 7 (Core)   3.10.0-693.21.1.el7.x86_64   docker://20.10.11
+node2    Ready,SchedulingDisabled   worker                 4d5h   v1.22.4   192.168.0.110    <none>        CentOS Linux 7 (Core)   3.10.0-693.21.1.el7.x86_64   docker://20.10.11
+
+```
+
+执行scale命令，再次横向扩容，看是否有pod飘到node2上，结果防线只有之前的pod，没有新的pod飘过去
+
+```shell
+# luca @ luca in ~ [17:24:46] C:130
+$ kubectl get pod -o wide
+NAME                     READY   STATUS    RESTARTS   AGE    IP               NODE    NOMINATED NODE   READINESS GATES
+nginx-54d66fc654-544xx   1/1     Running   0          15m    192.168.104.55   node2   <none>           <none>
+nginx-54d66fc654-pq6t8   1/1     Running   0          155m   192.168.104.53   node2   <none>           <none>
+nginx-54d66fc654-xnm9b   1/1     Running   0          155m   192.168.104.54   node2   <none>           <none>
+
+# luca @ luca in ~ [17:24:56]
+$ kubectl scale --replicas=5 deployment/nginx
+deployment.apps/nginx scaled
+
+# luca @ luca in ~ [17:25:18]
+$ kubectl get pod -o wide
+NAME                     READY   STATUS    RESTARTS   AGE    IP                NODE    NOMINATED NODE   READINESS GATES
+nginx-54d66fc654-544xx   1/1     Running   0          16m    192.168.104.55    node2   <none>           <none>
+nginx-54d66fc654-8khw6   1/1     Running   0          4s     192.168.166.156   node1   <none>           <none>
+nginx-54d66fc654-lr7zx   1/1     Running   0          4s     192.168.166.157   node1   <none>           <none>
+nginx-54d66fc654-pq6t8   1/1     Running   0          156m   192.168.104.53    node2   <none>           <none>
+nginx-54d66fc654-xnm9b   1/1     Running   0          156m   192.168.104.54    node2   <none>           <none>
+```
+
+解除cordon
+
+```shell
+# luca @ luca in ~ [17:25:18]
+$ kubectl get pod -o wide
+NAME                     READY   STATUS    RESTARTS   AGE    IP                NODE    NOMINATED NODE   READINESS GATES
+nginx-54d66fc654-544xx   1/1     Running   0          16m    192.168.104.55    node2   <none>           <none>
+nginx-54d66fc654-8khw6   1/1     Running   0          4s     192.168.166.156   node1   <none>           <none>
+nginx-54d66fc654-lr7zx   1/1     Running   0          4s     192.168.166.157   node1   <none>           <none>
+nginx-54d66fc654-pq6t8   1/1     Running   0          156m   192.168.104.53    node2   <none>           <none>
+nginx-54d66fc654-xnm9b   1/1     Running   0          156m   192.168.104.54    node2   <none>           <none>
+
+# luca @ luca in ~ [17:25:21]
+$ kubectl uncordon node2
+node/node2 uncordoned
+
+# luca @ luca in ~ [17:27:21]
+$ kubectl get node -o wide
+NAME     STATUS   ROLES                  AGE    VERSION   INTERNAL-IP      EXTERNAL-IP   OS-IMAGE                KERNEL-VERSION               CONTAINER-RUNTIME
+master   Ready    control-plane,master   4d5h   v1.22.4   122.114.50.242   <none>        CentOS Linux 7 (Core)   3.10.0-693.21.1.el7.x86_64   docker://20.10.11
+node1    Ready    worker                 4d5h   v1.22.4   192.168.247.34   <none>        CentOS Linux 7 (Core)   3.10.0-693.21.1.el7.x86_64   docker://20.10.11
+node2    Ready    worker                 4d5h   v1.22.4   192.168.0.110    <none>        CentOS Linux 7 (Core)   3.10.0-693.21.1.el7.x86_64   docker://20.10.11
+```
+
+### kubectl drain 演示
+
+drain的两个作用
+
+1. 设定此node不可以使用（cordon）
+2. evict驱逐pod到其他正常的node上
+
+```shell
+# luca @ luca in ~ [21:41:15]
+$ kubectl drain node2 --ignore-daemonsets  # 进入维护模式，忽略守护进程
+node/node2 cordoned
+WARNING: ignoring DaemonSet-managed Pods: kube-system/calico-node-4fd8c, kube-system/kube-proxy-z6vc8
+evicting pod default/nginx-54d66fc654-xnm9b  # 驱逐 pod
+evicting pod default/nginx-54d66fc654-544xx  # 驱逐 pod
+evicting pod default/nginx-54d66fc654-pq6t8  # 驱逐 pod
+pod/nginx-54d66fc654-pq6t8 evicted  # pod已经被驱逐
+pod/nginx-54d66fc654-544xx evicted   # pod已经被驱逐
+pod/nginx-54d66fc654-xnm9b evicted   # pod已经被驱逐
+node/node2 evicted   # pod已经被驱逐
+
+
+#此时 node2的状态是禁用调度
+
+# luca @ luca in ~ [21:54:02]
+$ kubectl get pod -o wide -A
+NAMESPACE              NAME                                         READY   STATUS    RESTARTS      AGE     IP                NODE     NOMINATED NODE   READINESS GATES
+default                nginx-54d66fc654-8khw6                       1/1     Running   0             4h28m   192.168.166.156   node1    <none>           <none>
+default                nginx-54d66fc654-lr7zx                       1/1     Running   0             4h28m   192.168.166.157   node1    <none>           <none>
+default                nginx-54d66fc654-rtjdd                       1/1     Running   0             3m19s   192.168.166.159   node1    <none>           <none>
+default                nginx-54d66fc654-t54gt                       1/1     Running   0             3m19s   192.168.166.158   node1    <none>           <none>
+default                nginx-54d66fc654-vglg7                       1/1     Running   0             3m19s   192.168.166.160   node1    <none>           <none>
+kube-system            calico-kube-controllers-67bb5696f5-dwfmf     1/1     Running   5 (23h ago)   4d10h   192.168.166.153   node1    <none>           <none>
+kube-system            calico-node-4fd8c                            1/1     Running   2 (23h ago)   4d10h   192.168.0.110     node2    <none>           <none>
+kube-system            calico-node-8xp57                            1/1     Running   2 (23h ago)   4d10h   192.168.247.34    node1    <none>           <none>
+kube-system            calico-node-xs9hf                            1/1     Running   2 (23h ago)   4d10h   122.114.50.242    master   <none>           <none>
+kube-system            coredns-7d89d9b6b8-766ml                     1/1     Running   2 (23h ago)   4d10h   192.168.166.154   node1    <none>           <none>
+kube-system            coredns-7d89d9b6b8-qh4d8                     1/1     Running   2 (23h ago)   4d10h   192.168.166.152   node1    <none>           <none>
+kube-system            etcd-master                                  1/1     Running   3 (23h ago)   4d10h   122.114.50.242    master   <none>           <none>
+kube-system            kube-apiserver-master                        1/1     Running   3 (23h ago)   4d10h   122.114.50.242    master   <none>           <none>
+kube-system            kube-controller-manager-master               1/1     Running   4 (23h ago)   4d10h   122.114.50.242    master   <none>           <none>
+kube-system            kube-proxy-24np4                             1/1     Running   2 (23h ago)   4d10h   192.168.247.34    node1    <none>           <none>
+kube-system            kube-proxy-hvvzd                             1/1     Running   2 (23h ago)   4d10h   122.114.50.242    master   <none>           <none>
+kube-system            kube-proxy-z6vc8                             1/1     Running   2 (23h ago)   4d10h   192.168.0.110     node2    <none>           <none>
+kube-system            kube-scheduler-master                        1/1     Running   4 (23h ago)   4d10h   122.114.50.242    master   <none>           <none>
+kubernetes-dashboard   dashboard-metrics-scraper-778b77d469-bfttk   1/1     Running   1 (23h ago)   34h     192.168.219.69    master   <none>           <none>
+kubernetes-dashboard   kubernetes-dashboard-86899d4bc7-8hkgv        1/1     Running   1 (23h ago)   34h     192.168.219.70    master   <none>           <none>
+kubernetes-dashboard   kubernetes-dashboard-86899d4bc7-zmv4w        1/1     Running   1 (23h ago)   34h     192.168.219.68    master   <none>           <none>
+
+
+# luca @ luca in ~ [21:54:32]
+$ kubectl get node -o wide
+NAME     STATUS                     ROLES                  AGE     VERSION   INTERNAL-IP      EXTERNAL-IP   OS-IMAGE                KERNEL-VERSION               CONTAINER-RUNTIME
+master   Ready                      control-plane,master   4d10h   v1.22.4   122.114.50.242   <none>        CentOS Linux 7 (Core)   3.10.0-693.21.1.el7.x86_64   docker://20.10.11
+node1    Ready                      worker                 4d10h   v1.22.4   192.168.247.34   <none>        CentOS Linux 7 (Core)   3.10.0-693.21.1.el7.x86_64   docker://20.10.11
+node2    Ready,SchedulingDisabled   worker                 4d10h   v1.22.4   192.168.0.110    <none>        CentOS Linux 7 (Core)   3.10.0-693.21.1.el7.x86_64   docker://20.10.11
+```
+
+维护完成，取消cordon,scale 水平扩展查看调度状态
+
+```shell
+# luca @ luca in ~ [21:54:47]
+$ kubectl uncordon node2
+node/node2 uncordoned
+
+# luca @ luca in ~ [21:56:02]
+$ kubectl get node -o wide
+NAME     STATUS   ROLES                  AGE     VERSION   INTERNAL-IP      EXTERNAL-IP   OS-IMAGE                KERNEL-VERSION               CONTAINER-RUNTIME
+master   Ready    control-plane,master   4d10h   v1.22.4   122.114.50.242   <none>        CentOS Linux 7 (Core)   3.10.0-693.21.1.el7.x86_64   docker://20.10.11
+node1    Ready    worker                 4d10h   v1.22.4   192.168.247.34   <none>        CentOS Linux 7 (Core)   3.10.0-693.21.1.el7.x86_64   docker://20.10.11
+node2    Ready    worker                 4d10h   v1.22.4   192.168.0.110    <none>        CentOS Linux 7 (Core)   3.10.0-693.21.1.el7.x86_64   docker://20.10.11
+
+# luca @ luca in ~ [21:59:20]
+$ kubectl scale  --replicas=1 deployment/nginx
+deployment.apps/nginx scaled
+
+# luca @ luca in ~ [21:59:36]
+$ kubectl get pod -o wide
+NAME                     READY   STATUS        RESTARTS   AGE     IP                NODE    NOMINATED NODE   READINESS GATES
+nginx-54d66fc654-8khw6   1/1     Terminating   0          4h34m   192.168.166.156   node1   <none>           <none>
+nginx-54d66fc654-fbw4k   1/1     Terminating   0          27s     192.168.104.58    node2   <none>           <none>
+nginx-54d66fc654-lr7zx   1/1     Running       0          4h34m   192.168.166.157   node1   <none>           <none>
+nginx-54d66fc654-tbhxb   1/1     Terminating   0          27s     192.168.104.56    node2   <none>           <none>
+
+# luca @ luca in ~ [21:59:39]
+$ kubectl scale  --replicas=2 deployment/nginx
+deployment.apps/nginx scaled
+
+# luca @ luca in ~ [21:59:56]
+$ kubectl get pod -o wide
+NAME                     READY   STATUS    RESTARTS   AGE     IP                NODE    NOMINATED NODE   READINESS GATES
+nginx-54d66fc654-lr7zx   1/1     Running   0          4h34m   192.168.166.157   node1   <none>           <none>
+nginx-54d66fc654-stvh2   1/1     Running   0          17s     192.168.104.59    node2   <none>           <none>
+
+```
+
+### [linux 中的自动补全bash](https://kubernetes.io/zh/docs/tasks/tools/included/optional-kubectl-configs-bash-linux/)
+
+kubectl 的 Bash 补全脚本可以用命令 `kubectl completion bash` 生成。 在 shell 中导入（Sourcing）补全脚本，将启用 kubectl 自动补全功能。
+
+然而，补全脚本依赖于工具 [**bash-completion**](https://github.com/scop/bash-completion)， 所以要先安装它（可以用命令 `type _init_completion` 检查 bash-completion 是否已安装）。
+
+#### 安装 bash-completion
+
+很多包管理工具均支持 bash-completion（参见[这里](https://github.com/scop/bash-completion#installation)）。 可以通过 `apt-get install bash-completion` 或 `yum install bash-completion` 等命令来安装它。
+
+上述命令将创建文件 `/usr/share/bash-completion/bash_completion`，它是 bash-completion 的主脚本。 依据包管理工具的实际情况，你需要在 `~/.bashrc` 文件中手工导入此文件。
+
+要查看结果，请重新加载你的 shell，并运行命令 `type _init_completion`。 如果命令执行成功，则设置完成，否则将下面内容添加到文件 `~/.bashrc` 中：
+
+```bash
+source /usr/share/bash-completion/bash_completion
+```
+
+重新加载 shell，再输入命令 `type _init_completion` 来验证 bash-completion 的安装状态。
+
+#### 启动 kubectl 自动补全功能
+
+你现在需要确保一点：kubectl 补全脚本已经导入（sourced）到 shell 会话中。 这里有两种验证方法：
+
+- 在文件 `~/.bashrc` 中导入（source）补全脚本：
+
+  ```bash
+  echo 'source <(kubectl completion bash)' >>~/.bashrc
+  ```
+
+- 将补全脚本添加到目录 `/etc/bash_completion.d` 中：
+
+  ```bash
+  kubectl completion bash >/etc/bash_completion.d/kubectl
+  ```
+
+如果 kubectl 有关联的别名，你可以扩展 shell 补全来适配此别名：
+
+```bash
+echo 'alias k=kubectl' >>~/.bashrc
+echo 'complete -F __start_kubectl k' >>~/.bashrc
+```
+
+**说明：**
+
+bash-completion 负责导入 `/etc/bash_completion.d` 目录中的所有补全脚本。
+
+两种方式的效果相同。重新加载 shell 后，kubectl 自动补全功能即可生效。
+
+### [osx中的自动补全zsh](https://kubernetes.io/zh/docs/tasks/tools/included/optional-kubectl-configs-zsh/)
+
+kubectl 通过命令 `kubectl completion zsh` 生成 Zsh 自动补全脚本。 在 shell 中导入（Sourcing）该自动补全脚本，将启动 kubectl 自动补全功能。
+
+为了在所有的 shell 会话中实现此功能，请将下面内容加入到文件 `~/.zshrc` 中。
+
+```zsh
+source <(kubectl completion zsh)
+```
+
+如果你为 kubectl 定义了别名，可以扩展脚本补全，以兼容该别名。
+
+```zsh
+echo 'alias k=kubectl' >>~/.zshrc
+echo 'compdef __start_kubectl k' >>~/.zshrc
+```
+
+重新加载 shell 后，kubectl 自动补全功能将立即生效。
+
+如果你收到 `complete:13: command not found: compdef` 这样的错误提示，那请将下面内容添加到 `~/.zshrc` 文件的开头：
+
+```zsh
+autoload -Uz compinit
+compinit
+```
