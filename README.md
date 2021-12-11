@@ -5,6 +5,8 @@
 
 [pod高级实战](pod_adv.md)
 
+[kubectl管理k8s](./kubectl.md)
+
 ## 常用命令
 
 ```bash
@@ -16,8 +18,8 @@
  kubeadm token create --print-join-command  #查看加入集群的命令
  kubectl get deploy -A  # 获取所有的deploy
  kubectl  delete deploy kubernetes-dashboard -n kube-system # 删除特定的deploy
-# 强制删除pod
-kubectl delete pod  pod名字   --force --grace-period=0
+
+kubectl delete pod  pod名字   --force --grace-period=0  # 强制删除pod
 ```
 
 # 
