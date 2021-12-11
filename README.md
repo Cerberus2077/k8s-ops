@@ -6,7 +6,7 @@
 [pod高级实战](pod_adv.md)
 
 [kubectl管理k8s](./kubectl.md)
-
+[k8s控制器 Replicaset 和 Deployment](./k8s_controllers_Replicaset_Deployment.md)
 ## 常用命令
 
 ```bash
