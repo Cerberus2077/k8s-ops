@@ -1,0 +1,27 @@
+kind: Deployment
+apiVersion: apps/v1
+metadata:
+  name: mysql
+  namespace: default
+  labels:
+    k8s-app: mysql
+spec:
+  selector: 
+    matchLabels:
+      k8s-app: mysql
+  replicas: 2 # 副本数
+  template:    #模版
+    metadata:
+      labels:
+        k8s-app: mysql
+    spec:
+      containers:
+      - name: mysql
+        image: docker.io/mysql/mysql-server
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 3306
+          protocol: TCP
+        env:  #环境变量
+          - name: MYSQL_ROOT_PASSWORD
+            value: "Lucaissolucky"

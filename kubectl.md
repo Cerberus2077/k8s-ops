@@ -677,14 +677,101 @@ pod "nginx" force deleted
 
 ## [yaml语法规则](./yaml_concept.md)
 
+1. 大小写敏感
+2. 使用缩进表示层级关系
+3. 缩进时使用空格而不是tab[各系统tab不一致]
+4. 缩进的空格数不重要，只要相同层级的元素堆砌左侧即可
+5. #表示注释，从#到行尾都会被解释器忽略
+
 ## kubectl 创建yaml 生成deploy
 
-```
+[mysql-deployment.yaml](./yml/chpt11/mysql-deployment.yaml)
+
+```yaml
+kind: Deployment
+apiVersion: apps/v1
+metadata:
+  name: mysql
+  namespace: default
+  labels:
+    k8s-app: mysql
+spec:
+  selector: 
+    matchLabels:
+      k8s-app: mysql
+  replicas: 2   # 副本数
+  template:    #模版
+    metadata:
+      labels:
+        k8s-app: mysql
+    spec:
+      containers:
+      - name: mysql
+        image: docker.io/mysql/mysql-server
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 3306
+          protocol: TCP
+        env:  #环境变量
+          - name: MYSQL_ROOT_PASSWORD
+            value: "Lucaissolucky"
+
+
 
 ```
 
+可以使用命令查看帮助[类似pod]
+
+```bash
+# luca @ luca in ~ [12:00:04] C:130
+$ kubectl explain deploy
+KIND:     Deployment
+VERSION:  apps/v1
+
+DESCRIPTION:
+     Deployment enables declarative updates for Pods and ReplicaSets.
+
+FIELDS:
+   apiVersion	<string>
+     APIVersion defines the versioned schema of this representation of an
+     object. Servers should convert recognized schemas to the latest internal
+     value, and may reject unrecognized values. More info:
+     https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+
+   kind	<string>
+     Kind is a string value representing the REST resource this object
+     represents. Servers may infer this from the endpoint the client submits
+     requests to. Cannot be updated. In CamelCase. More info:
+     https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+
+   metadata	<Object>
+     Standard object's metadata. More info:
+     https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata
+
+   spec	<Object>
+     Specification of the desired behavior of the Deployment.
+
+   status	<Object>
+     Most recently observed status of the Deployment.
+
+```
+
+```shell
+$ kubectl apply -f ./yml/chpt11/mysql-deployment.yaml
+deployment.apps/mysql created
+# luca @ luca in ~ [12:31:07]
+$ kubectl get pod -o wide
+NAME                   READY   STATUS    RESTARTS   AGE   IP                NODE    NOMINATED NODE   READINESS GATES
+mysql-769b9b44-2wknl   1/1     Running   0          4s    192.168.104.52    node2   <none>           <none>
+mysql-769b9b44-cptjn   1/1     Running   0          86s   192.168.166.155   node1   <none>           <none>
+# luca @ luca in ~ [12:31:41]
+$ kubectl get deploy --show-labels
+NAME    READY   UP-TO-DATE   AVAILABLE   AGE     LABELS
+mysql   2/2     2            2           7m47s   k8s-app=mysql
+
+```
 
 
-## kubectl其他常用命令和参数说明
 
 ## 使用kubectl管理集群
+
