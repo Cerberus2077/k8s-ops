@@ -1,0 +1,23 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: appv1
+  labels:
+    app: v1
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: v1
+      apply: canary
+  template:
+    metadata:
+      labels:
+        app: v1
+        apply: canary
+    spec:
+      containers:
+      - name: nginx
+        image: xuegod/canary:v1
+        ports:
+        - containerPort: 80

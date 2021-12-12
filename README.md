@@ -18,8 +18,8 @@
  kubeadm token create --print-join-command  #查看加入集群的命令
  kubectl get deploy -A  # 获取所有的deploy
  kubectl  delete deploy kubernetes-dashboard -n kube-system # 删除特定的deploy
-
-kubectl delete pod  pod名字   --force --grace-period=0  # 强制删除pod
+ kubectl delete pod  pod名字   --force --grace-period=0  # 强制删除pod
+ kubectl  rollout history deploy  #查看历史发布版本
+kubectl rollout undo deployment appv1 --to-revision=1 # 回滚到版本1
 ```
 
-# 
