@@ -1,0 +1,18 @@
+kind: Pod
+apiVersion: v1
+metadata:
+  name: read-pod
+spec:
+  containers:
+  - name: read-pod
+    image: nginx
+    imagePullPolicy: IfNotPresent
+    volumeMounts:
+      - name: nfs-pvc
+        mountPath: /usr/share/nginx/html
+  restartPolicy: "Never"
+  volumes:
+    - name: nfs-pvc
+      persistentVolumeClaim:
+        claimName: test-claim1
+
