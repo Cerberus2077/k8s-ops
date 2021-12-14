@@ -28,7 +28,7 @@ spec:
             - name: NFS_SERVER
               value: 192.168.187.145
             - name: NFS_PATH
-              value: /opt/nfs
+              value: /opt/nfs 
       volumes:
         - name: nfs-client-root
           nfs:
