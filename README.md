@@ -29,3 +29,8 @@
 kubectl rollout undo deployment appv1 --to-revision=1 # 回滚到版本1
 ```
 
+## k8s调优的方向
+
+1. 网络层面  网络插件
+2. 存储 
+3. iptables/ipvs
