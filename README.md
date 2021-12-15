@@ -26,7 +26,9 @@
  kubectl  delete deploy kubernetes-dashboard -n kube-system # 删除特定的deploy
  kubectl delete pod  pod名字   --force --grace-period=0  # 强制删除pod
  kubectl  rollout history deploy  #查看历史发布版本
-kubectl rollout undo deployment appv1 --to-revision=1 # 回滚到版本1
+ kubectl rollout undo deployment appv1 --to-revision=1 # 回滚到版本1
+ kubectl create sa monitor -n monitor-sa  # 创建sa账号
+ kubectl create clusterrolebinding monitor-clusterrolebinding -n monitor-sa --clusterrole=cluster-admin --serviceaccount=monitor-sa:monitor # 绑定sa账号到cluster-admin这个集群角色
 ```
 
 ## k8s调优的方向
