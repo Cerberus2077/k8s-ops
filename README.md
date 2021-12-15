@@ -29,6 +29,7 @@
  kubectl rollout undo deployment appv1 --to-revision=1 # 回滚到版本1
  kubectl create sa monitor -n monitor-sa  # 创建sa账号
  kubectl create clusterrolebinding monitor-clusterrolebinding -n monitor-sa --clusterrole=cluster-admin --serviceaccount=monitor-sa:monitor # 绑定sa账号到cluster-admin这个集群角色
+ kubectl create clusterrolebinding monitor-user-clusterrolebinding  --clusterrole=cluster-admin --user=system:serviceaccount:monitor-sa # 对用户进行授权
 ```
 
 ## k8s调优的方向
