@@ -59,4 +59,4 @@ spec:
 #      nodeSelector:  #指明运行在哪，此IP要和default backend是同一个IP
 #        kubernetes.io/hostname: 10.3.1.17   #上面映射到了hostport80，确保此IP80，443没有占用.
 # 
-      nodeName: xuegod62
+      nodeName: node2
