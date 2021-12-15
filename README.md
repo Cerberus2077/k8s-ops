@@ -10,6 +10,9 @@
 [k8s控制器 Replicaset 和 Deployment](./k8s_controllers_Replicaset_Deployment.md)
 
 [存储类](./storages.md)
+
+[ingress](./ingress.md)
+
 ## 常用命令
 
 ```bash
