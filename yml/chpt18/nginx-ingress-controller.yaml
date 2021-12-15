@@ -24,7 +24,7 @@ spec:
       hostNetwork: true  #表示容器使用和宿主机一样的网络
       serviceAccountName: nginx-ingress-serviceaccount #引用前面创建的serviceacount
       containers:   
-      - image: registry.cn-hangzhou.aliyuncs.com/peter1009/nginx-ingress-controller:0.20.0      #容器使用的镜像
+      - image: registry.cn-hangzhou.aliyuncs.com/google_containers/nginx-ingress-controller:v1.1.0 #容器使用的镜像
         name: nginx-ingress-controller  #容器名
         readinessProbe:   #启动这个服务时要验证/healthz 端口10254会在运行的node上监听。 
           httpGet:

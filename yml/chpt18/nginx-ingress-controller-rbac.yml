@@ -9,7 +9,7 @@ metadata:
   name: nginx-ingress-serviceaccount #创建一个serveerAcount
   namespace: kube-system
 ---
-apiVersion: rbac.authorization.k8s.io/v1
+apiVersion: rbac.authorization.k8s.io/v1beta1
 kind: ClusterRole
 metadata:
   name: nginx-ingress-clusterrole   #这个ServiceAcount所绑定的集群角色
@@ -61,7 +61,7 @@ rules:
     verbs:
       - update
 ---
-apiVersion: rbac.authorization.k8s.io/v1
+apiVersion: rbac.authorization.k8s.io/v1beta1
 kind: Role
 metadata:         
   name: nginx-ingress-role  #这是一个角色，而非集群角色 
@@ -104,7 +104,7 @@ rules:  #角色的权限
       - create
       - update
 ---
-apiVersion: rbac.authorization.k8s.io/v1
+apiVersion: rbac.authorization.k8s.io/v1beta1
 kind: RoleBinding       #角色绑定
 metadata:
   name: nginx-ingress-role-nisa-binding
@@ -118,7 +118,7 @@ subjects:
     name: nginx-ingress-serviceaccount #绑定在这个用户 
     namespace: kube-system
 ---
-apiVersion: rbac.authorization.k8s.io/v1
+apiVersion: rbac.authorization.k8s.io/v1beta1
 kind: ClusterRoleBinding      #集群绑定
 metadata:
   name: nginx-ingress-clusterrole-nisa-binding
