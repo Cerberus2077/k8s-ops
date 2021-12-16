@@ -2,6 +2,10 @@
 
 ![k8s企业中的架构图](./pic/image-20211201180903932.png)
 
+
+
+![components-of-kubernetes](./pic/components-of-kubernetes.svg)
+
 ## k8s配置信息
 
 主机密码：YbB2YZ4omsa231t
