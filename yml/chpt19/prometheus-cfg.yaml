@@ -1,0 +1,81 @@
+---
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  labels:
+    app: prometheus
+  name: prometheus-config
+  namespace: monitor-sa
+data:
+  prometheus.yml: |
+    global:
+      scrape_interval: 15s  # 采集间隔
+      scrape_timeout: 10s   # 超时时间
+      evaluation_interval: 1m  # 触发告警检测时间
+    scrape_configs:  # 配置数据源
+    - job_name: 'kubernetes-node' # 任务名
+      kubernetes_sd_configs:  # 基于k8s node的服务发现
+      - role: node
+      relabel_configs:   # 标签重写
+      - source_labels: [__address__]  # 原始标签
+        regex: '(.*):10250'   # 正则
+        replacement: '${1}:9100'  # 替换
+        target_label: __address__  # 目标标签
+        action: replace  # 操作是替换
+      - action: labelmap  # 匹配到下面正则的标签  保留
+        regex: __meta_kubernetes_node_label_(.+)
+    - job_name: 'kubernetes-node-cadvisor'  # 
+      kubernetes_sd_configs:
+      - role:  node
+      scheme: https   # https 获取
+      tls_config:   # 证书和token
+        ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+      bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+      relabel_configs: # 标签重写
+      - action: labelmap   # 保留标签
+        regex: __meta_kubernetes_node_label_(.+)
+      - target_label: __address__  # 目标标签
+        replacement: kubernetes.default.svc:443
+      - source_labels: [__meta_kubernetes_node_name]
+        regex: (.+)
+        target_label: __metrics_path__
+        replacement: /api/v1/nodes/${1}/proxy/metrics/cadvisor
+    - job_name: 'kubernetes-apiserver'  # 基于endpoints的服务发现
+      kubernetes_sd_configs:
+      - role: endpoints
+      scheme: https
+      tls_config:
+        ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+      bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+      relabel_configs:
+      - source_labels: [__meta_kubernetes_namespace, __meta_kubernetes_service_name, __meta_kubernetes_endpoint_port_name]
+        action: keep
+        regex: default;kubernetes;https
+    - job_name: 'kubernetes-service-endpoints'
+      kubernetes_sd_configs:
+      - role: endpoints
+      relabel_configs:
+      - source_labels: [__meta_kubernetes_service_annotation_prometheus_io_scrape]
+        action: keep
+        regex: true  # 保持
+      - source_labels: [__meta_kubernetes_service_annotation_prometheus_io_scheme]
+        action: replace
+        target_label: __scheme__
+        regex: (https?)
+      - source_labels: [__meta_kubernetes_service_annotation_prometheus_io_path]
+        action: replace
+        target_label: __metrics_path__
+        regex: (.+)
+      - source_labels: [__address__, __meta_kubernetes_service_annotation_prometheus_io_port]
+        action: replace
+        target_label: __address__
+        regex: ([^:]+)(?::\d+)?;(\d+)
+        replacement: $1:$2
+      - action: labelmap
+        regex: __meta_kubernetes_service_label_(.+)
+      - source_labels: [__meta_kubernetes_namespace]
+        action: replace
+        target_label: kubernetes_namespace
+      - source_labels: [__meta_kubernetes_service_name]
+        action: replace
+        target_label: kubernetes_name 

@@ -8,10 +8,10 @@ metadata:
 spec:
   tls:
   - hosts:
-    -  tomcat.lucky.com
+    -  k8s.justbeta.pro
     secretName: tomcat-ingress-secret
   rules:
-  - host: tomcat.lucky.com
+  - host: k8s.justbeta.pro
     http:
       paths:
       - path: /

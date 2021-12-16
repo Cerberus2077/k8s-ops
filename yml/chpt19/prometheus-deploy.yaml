@@ -1,0 +1,58 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: prometheus-server
+  namespace: monitor-sa
+  labels:
+    app: prometheus
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: prometheus
+      component: server
+    #matchExpressions:
+    #- {key: app, operator: In, values: [prometheus]}
+    #- {key: component, operator: In, values: [server]}
+  template:
+    metadata:
+      labels:
+        app: prometheus
+        component: server
+      annotations:
+        prometheus.io/scrape: 'false'
+    spec:
+      nodeName: node2
+      serviceAccountName: monitor
+      containers:
+      - name: prometheus
+        image: prom/prometheus:v2.27.1
+        imagePullPolicy: IfNotPresent
+        command:
+          - prometheus
+          - --config.file=/etc/prometheus/prometheus.yml
+          - --storage.tsdb.path=/prometheus # 旧数据存放位置
+          - --storage.tsdb.retention=72h   # 旧数据存放时间
+          - --web.enable-lifecycle   # 热加载
+        ports:
+        - containerPort: 9090
+          protocol: TCP
+        volumeMounts:   # 将configmap做成卷挂在到/etc/prometheus/ 
+        - mountPath: /etc/prometheus/prometheus.yml
+          name: prometheus-config
+          subPath: prometheus.yml
+        - mountPath: /prometheus
+          name: prometheus-storage-volume
+      volumes:
+        - name: prometheus-config
+          configMap:
+            name: prometheus-config
+            items:
+              - key: prometheus.yml
+                path: prometheus.yml
+                mode: 0644
+        - name: prometheus-storage-volume
+          hostPath:
+           path: /opt/data
+           type: Directory
