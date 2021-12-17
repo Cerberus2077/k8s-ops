@@ -13,6 +13,8 @@
 
 [ingress](./ingress.md)
 
+[elk](./elk.md)
+
 ## 常用命令
 
 ```bash

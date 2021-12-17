@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: elktest
+  labels:
+    name: myapp
+  namespace: kube-logging
+spec:
+  containers:
+  - name: elktest
+    image: busybox
+    imagePullPolicy: IfNotPresent
+    resources:
+      limits:
+        memory: "128Mi"
+        cpu: "500m"
+    args: [/bin/sh,-c,'i=0;while true;do echo "$i:$(date)"; i = $(i+1);sleep ;done']

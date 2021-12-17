@@ -52,7 +52,7 @@ spec:
         imagePullPolicy: IfNotPresent
         command: ["sh", "-c", "chown -R 1000:1000 /usr/share/elasticsearch/data"]
         securityContext:
-          privileged: true
+          privileged: true # 特权模式
         volumeMounts:
         - name: data
           mountPath: /usr/share/elasticsearch/data
@@ -67,7 +67,7 @@ spec:
         imagePullPolicy: IfNotPresent
         command: ["sh", "-c", "ulimit -n 65536"]
         securityContext:
-          privileged: true
+          privileged: true  # 特权模式
   volumeClaimTemplates:
   - metadata:
       name: data

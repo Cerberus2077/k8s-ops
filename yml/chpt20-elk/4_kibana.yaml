@@ -38,7 +38,7 @@ spec:
           requests:
             cpu: 100m
         env:
-          - name: ELASTICSEARCH_URL
+          - name: ELASTICSEARCH_URL  # 定义kibana 要链接的es集群
             value: http://elasticsearch:9200
         ports:
         - containerPort: 5601
