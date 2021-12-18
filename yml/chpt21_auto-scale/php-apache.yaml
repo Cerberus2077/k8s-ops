@@ -14,7 +14,7 @@ spec:
     spec:
       containers:
       - name: php-apache
-        image: k8s.gcr.io/hpa-example:v1
+        image: php:5-apache
         imagePullPolicy: IfNotPresent
         ports:
         - containerPort: 80
