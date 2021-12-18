@@ -15,6 +15,8 @@
 
 [elk](./elk.md)
 
+[pod自动扩展](./pod_autoscale.md)
+
 ## 常用命令
 
 ```bash

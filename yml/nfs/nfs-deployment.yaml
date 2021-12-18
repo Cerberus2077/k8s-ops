@@ -6,7 +6,7 @@ spec:
   selector:
     matchLabels:
        app: nfs-provisioner
-  replicas: 1
+  replicas: 4
   strategy:
     type: Recreate
   template:
