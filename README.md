@@ -36,8 +36,28 @@
  kubectl create clusterrolebinding monitor-user-clusterrolebinding  --clusterrole=cluster-admin --user=system:serviceaccount:monitor-sa # 对用户进行授权
 ```
 
+# 常用连接以及问题处理
+
+## 相关镜像
+
+[jenkins镜像](https://mirrors.tuna.tsinghua.edu.cn/jenkins/updates/update-center.json)
+
+[docker源](https://2c2nqqhp.mirror.aliyuncs.com)
+
+[阿里云镜像](https://developer.aliyun.com/mirror/)
+
 ## k8s调优的方向
 
 1. 网络层面  网络插件
 2. 存储 
 3. iptables/ipvs
+
+## jenkins 
+
+1. 初始化 插件连接超时
+
+   1. 在启动以后,输入密码,然后界面在缓冲 / 提示实例离线的时候, 打开`/pluginManager/advanced`
+
+      在最下面设置`https://mirrors.tuna.tsinghua.edu.cn/jenkins/updates/update-center.json`,然后提交,然后chenk now一下
+      
+

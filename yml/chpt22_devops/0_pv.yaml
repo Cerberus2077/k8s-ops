@@ -8,6 +8,6 @@ spec:
   accessModes:
   - ReadWriteMany
   nfs:
-    server: 192.168.40.63
-    path: /data/v1
+    server: 192.168.187.145
+    path: /opt/nfs
 

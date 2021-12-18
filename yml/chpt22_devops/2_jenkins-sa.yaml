@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  creationTimestamp: "2021-12-18T14:18:21Z"
+  name: jenkins-k8s-sa
+  namespace: jenkins-k8s
+  resourceVersion: "1564991"
+  uid: 0f74809e-5ecf-4833-b51f-90c317f2da52
+secrets:
+- name: jenkins-k8s-sa-token-p27kk
