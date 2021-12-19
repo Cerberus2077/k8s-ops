@@ -20,4 +20,25 @@
 
 ![image-20211219210310386](/Users/luca/Documents/文稿/k8s-ops/pic/image-20211219210310386.png)
 
+```bash
+$ kubectl create ns development
+namespace/development created
+$ kubectl create ns qatest    
+namespace/qatest created
+$ kubectl create ns production                                                                                                          
+namespace/production created
+$ kubectl get ns               
+NAME              STATUS   AGE
+default           Active   12d
+development       Active   40s
+jenkins-k8s       Active   23h
+kube-node-lease   Active   12d
+kube-public       Active   12d
+kube-system       Active   12d
+production        Active   67s
+qatest            Active   59s
+```
+
+![image-20211219212605210](./pic/image-20211219212605210.png)
+
 # 添加harbor
