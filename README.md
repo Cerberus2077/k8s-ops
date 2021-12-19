@@ -17,6 +17,8 @@
 
 [pod自动扩展](./pod_autoscale.md)
 
+[devops/CICD](./devops.md)
+
 ## 常用命令
 
 ```bash
