@@ -12,13 +12,13 @@
 
 - slave需要和k8s集群通信，kubectl apply yaml 文件，所以需要k8s集群的认证信息
 
-![image-20211219205623058](/Users/luca/Documents/文稿/k8s-ops/pic/image-20211219205623058.png)
+![image-20211219205623058](./pic/image-20211219205623058.png)
 
 # 添加docker hub 凭据
 
 [系统管理]---->[管理凭据]
 
-![image-20211219210310386](/Users/luca/Documents/文稿/k8s-ops/pic/image-20211219210310386.png)
+![image-20211219210310386](./pic/image-20211219210310386.png)
 
 ```bash
 $ kubectl create ns development
