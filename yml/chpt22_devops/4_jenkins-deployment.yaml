@@ -16,7 +16,7 @@ spec:
       serviceAccount: jenkins-k8s-sa
       containers:
       - name: jenkins
-        image:  xuegod/jenkins:v1
+        image:  jenkinsci/blueocean:latest
         imagePullPolicy: IfNotPresent
         ports:
         - containerPort: 8080
