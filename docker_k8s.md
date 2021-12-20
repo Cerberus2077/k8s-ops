@@ -430,7 +430,7 @@ systemctl  enable kubelet && systemctl start kubelet
       dataDir: /var/lib/etcd
   imageRepository: registry.cn-hangzhou.aliyuncs.com/google_containers
   kind: ClusterConfiguration
-  kubernetesVersion: v1.22.4  # k8s版本
+  kubernetesVersion: v1.23.1  # k8s版本
   networking:
     dnsDomain: cluster.local
     podSubnet: 192.168.0.0/16
