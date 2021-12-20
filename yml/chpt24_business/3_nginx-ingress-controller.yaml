@@ -24,7 +24,7 @@ spec:
       hostNetwork: true  #表示容器使用和宿主机一样的网络
       serviceAccountName: nginx-ingress-serviceaccount #引用前面创建的serviceacount
       containers:   
-      - image: registry.cn-hangzhou.aliyuncs.com/peter1009/nginx-ingress-controller:0.20.0      #容器使用的镜像
+      - image: registry.cn-hangzhou.aliyuncs.com/google_containers/nginx-ingress-controller:v0.50.0     #容器使用的镜像
         imagePullPolicy: IfNotPresent
         name: nginx-ingress-controller  #容器名
         readinessProbe:   #启动这个服务时要验证/healthz 端口10254会在运行的node上监听。 
@@ -60,4 +60,4 @@ spec:
 #      nodeSelector:  #指明运行在哪，此IP要和default backend是同一个IP
 #        kubernetes.io/hostname: 10.3.1.17   #上面映射到了hostport80，确保此IP80，443没有占用.
 # 
-      nodeName: xuegod64
+      nodeName: node1
