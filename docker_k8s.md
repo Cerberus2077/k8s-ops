@@ -562,7 +562,7 @@ rsync -aP -e "ssh " ~/.kube/config node2:~/.kube/
               value: "true"
 ```
 
-修改好的 [calico.yaml](./yml/calico.yaml )  文件
+修改好的 [calico.yaml](./yml/chpt0/calico.yaml )  文件
 
 安装calico
 
