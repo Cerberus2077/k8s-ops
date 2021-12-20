@@ -1,0 +1,63 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nginx-ingress-controller
+  labels:
+    k8s-app: nginx-ingress-controller
+  namespace: kube-system
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+       k8s-app: nginx-ingress-controller
+  template:
+    metadata:
+      labels:
+        k8s-app: nginx-ingress-controller
+    spec:
+      # hostNetwork makes it possible to use ipv6 and to preserve the source IP correctly regardless of docker configuration
+      # however, it is not a hard dependency of the nginx-ingress-controller itself and it may cause issues if port 10254 already is taken on the host
+      # that said, since hostPort is broken on CNI (https://github.com/kubernetes/kubernetes/issues/31307) we have to use hostNetwork where CNI is used
+      # like with kubeadm
+      # hostNetwork: true #注释表示不使用宿主机的80口，
+      terminationGracePeriodSeconds: 60
+      hostNetwork: true  #表示容器使用和宿主机一样的网络
+      serviceAccountName: nginx-ingress-serviceaccount #引用前面创建的serviceacount
+      containers:   
+      - image: registry.cn-hangzhou.aliyuncs.com/peter1009/nginx-ingress-controller:0.20.0      #容器使用的镜像
+        imagePullPolicy: IfNotPresent
+        name: nginx-ingress-controller  #容器名
+        readinessProbe:   #启动这个服务时要验证/healthz 端口10254会在运行的node上监听。 
+          httpGet:
+            path: /healthz
+            port: 10254
+            scheme: HTTP
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 10254
+            scheme: HTTP
+          initialDelaySeconds: 10  #每隔10做健康检查 
+          timeoutSeconds: 1
+        ports:
+        - containerPort: 80  
+          hostPort: 80    #80映射到80
+#        - containerPort: 443
+#          hostPort: 443
+        env:
+          - name: POD_NAME
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.name
+          - name: POD_NAMESPACE
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.namespace
+        args:
+        - /nginx-ingress-controller
+        - --default-backend-service=$(POD_NAMESPACE)/default-http-backend
+#        - --default-ssl-certificate=$(POD_NAMESPACE)/ingress-secret    #这是启用Https时用的
+#      nodeSelector:  #指明运行在哪，此IP要和default backend是同一个IP
+#        kubernetes.io/hostname: 10.3.1.17   #上面映射到了hostport80，确保此IP80，443没有占用.
+# 
+      nodeName: xuegod64
