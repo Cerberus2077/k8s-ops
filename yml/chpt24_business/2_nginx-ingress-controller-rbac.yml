@@ -15,24 +15,25 @@ metadata:
   name: nginx-ingress-clusterrole   #这个ServiceAcount所绑定的集群角色
 rules:
   - apiGroups:
-      - "" 
-    resources:    #此集群角色的权限，它能操作的API资源 
+      - ''
+    resources:
       - configmaps
       - endpoints
       - nodes
       - pods
       - secrets
+      - namespaces
     verbs:
       - list
       - watch
   - apiGroups:
-      - ""
+      - ''
     resources:
       - nodes
     verbs:
       - get
   - apiGroups:
-      - ""
+      - ''
     resources:
       - services
     verbs:
@@ -40,8 +41,7 @@ rules:
       - list
       - watch
   - apiGroups:
-      - "extensions"
-      - "networking.k8s.io"
+      - networking.k8s.io
     resources:
       - ingresses
     verbs:
@@ -49,19 +49,26 @@ rules:
       - list
       - watch
   - apiGroups:
-      - ""
+      - ''
     resources:
-        - events
+      - events
     verbs:
-        - create
-        - patch
+      - create
+      - patch
   - apiGroups:
-      - "extensions"
-      - "networking.k8s.io"
+      - networking.k8s.io/v1
     resources:
       - ingresses/status
     verbs:
       - update
+  - apiGroups:
+      - networking.k8s.io/v1
+    resources:
+      - ingressclasses
+    verbs:
+      - get
+      - list
+      - watch
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
@@ -70,41 +77,74 @@ metadata:
   namespace: kube-system
 rules:  #角色的权限 
   - apiGroups:
-      - ""
+      - ''
     resources:
-      - configmaps
-      - pods
-      - secrets
       - namespaces
     verbs:
       - get
   - apiGroups:
-      - ""
+      - ''
     resources:
       - configmaps
-    resourceNames:
-      # Defaults to "<election-id>-<ingress-class>"
-      # Here: "<ingress-controller-leader>-<nginx>"
-      # This has to be adapted if you change either parameter
-      # when launching the nginx-ingress-controller.
-      - "ingress-controller-leader-nginx"
-    verbs:
-      - get
-      - update
-  - apiGroups:
-      - ""
-    resources:
-      - configmaps
-    verbs:
-      - create
-  - apiGroups:
-      - ""
-    resources:
+      - pods
+      - secrets
       - endpoints
     verbs:
       - get
-      - create
+      - list
+      - watch
+  - apiGroups:
+      - ''
+    resources:
+      - services
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - networking.k8s.io
+    resources:
+      - ingresses
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - networking.k8s.io
+    resources:
+      - ingresses/status
+    verbs:
       - update
+  - apiGroups:
+      - networking.k8s.io
+    resources:
+      - ingressclasses
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - ''
+    resources:
+      - configmaps
+    resourceNames:
+      - ingress-controller-leader
+    verbs:
+      - get
+      - update
+  - apiGroups:
+      - ''
+    resources:
+      - configmaps
+    verbs:
+      - create
+  - apiGroups:
+      - ''
+    resources:
+      - events
+    verbs:
+      - create
+      - patch
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding       #角色绑定

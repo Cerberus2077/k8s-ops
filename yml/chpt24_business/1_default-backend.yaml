@@ -38,7 +38,7 @@ spec:
 #          requests:
 #            cpu: 10m
 #            memory: 20Mi
-      nodeName: node1
+      nodeName: node
 ---
 apiVersion: v1
 kind: Service     #为default backend 创建一个service
