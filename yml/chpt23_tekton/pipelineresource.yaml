@@ -1,0 +1,11 @@
+apiVersion: tekton.dev/v1alpha1
+kind: PipelineResource
+metadata:
+  name: xuegod-tekton-example
+spec:
+  type: git
+  params:
+    - name: url
+      value: https://github.com/luckylucky421/tekton-demo
+    - name: revision
+      value: master
