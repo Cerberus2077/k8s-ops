@@ -8,10 +8,10 @@ metadata:
 spec:
   tls:
   - hosts:
-    -  tomcat.lucky.com
+    -  demon.justbeta.pro
     secretName: tomcat-ingress-secret
   rules:
-  - host: tomcat.lucky.com
+  - host: demon.justbeta.pro
     http:
       paths:
       - path: /
@@ -21,4 +21,3 @@ spec:
            name: tomcat
            port:
             number: 8080
-

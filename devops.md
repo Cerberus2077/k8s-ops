@@ -1,5 +1,7 @@
 # jenkins 配置k8s互通以及pod 模版
 
+![img](./pic/kubernetes-jenkins-ci-cd.png)
+
 ![image-20211219203856678](./pic/image-20211219203856678.png)
 
 ![image-20211219204820465](./pic/image-20211219204820465.png)
