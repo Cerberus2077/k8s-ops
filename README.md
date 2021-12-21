@@ -40,6 +40,7 @@
 1. 所有节点安装metrics 
 2. 安装监控
 3. 配置基础的elk
+4. 更新k8s证书时间
 
 ## 证书相关（let'sencrypt）
 
@@ -80,6 +81,151 @@ $ kubectl apply -f https://github.com/jetstack/cert-manager/releases/download/v1
 您可以使用`helm template`或`cmctl x install --dry-run`来生成自定义的 cert-manager 安装清单。有关更多详细信息，请参阅[使用 cmctl x install](https://cert-manager.io/docs/installation/cmctl/#output-yaml)[输出 YAML](https://cert-manager.io/docs/installation/helm/#output-yaml)和[使用 helm 模板输出 YAML](https://cert-manager.io/docs/installation/helm/#output-yaml)。这个模板化的证书管理器清单可以通过管道传输到您首选的部署工具中。
 
 如果您使用 Helm 进行自动化，cert-manager[支持使用 Helm 进行安装](https://cert-manager.io/docs/installation/helm/)。
+
+### 安装cmctl
+
+您需要`cmctl.tar.gz`所用平台的文件，可以在我们的[GitHub 发布页面 上](https://github.com/jetstack/cert-manager/releases)找到这些文件 。为了使用`cmctl`你需要它的二进制文件可以`cmctl`在你的`$PATH`. 运行以下命令来设置 CLI。用您的系统等效物替换 OS 和 ARCH：
+
+```console
+OS=$(go env GOOS); ARCH=$(go env GOARCH); curl -L -o cmctl.tar.gz https://github.com/jetstack/cert-manager/releases/latest/download/cmctl-$OS-$ARCH.tar.gz
+tar xzf cmctl.tar.gz
+sudo mv cmctl /usr/local/bin
+```
+
+您可以运行`cmctl help`以测试 CLI 是否设置正确：
+
+```console
+$ cmctl help
+
+cmctl is a CLI tool manage and configure cert-manager resources for Kubernetes
+
+Usage: cmctl [command]
+
+Available Commands:
+  approve      Approve a CertificateRequest
+  check        Check cert-manager components
+  completion   Generate completion scripts for the cert-manager CLI
+  convert      Convert cert-manager config files between different API versions
+  create       Create cert-manager resources
+  deny         Deny a CertificateRequest
+  experimental Interact with experimental features
+  help         Help about any command
+  inspect      Get details on certificate related resources
+  renew        Mark a Certificate for manual renewal
+  status       Get details on current status of cert-manager resources
+  version      Print the cert-manager CLI version and the deployed cert-manager version
+
+Flags:
+  -h, --help                           help for cmctl
+      --log-flush-frequency duration   Maximum number of seconds between log flushes (default 5s)
+
+Use "cmctl [command] --help" for more information about a command.
+```
+
+### 命令
+
+### 批准和拒绝证书请求
+
+可以 使用各自的 cmctl 命令[批准或拒绝](https://cert-manager.io/docs/concepts/certificaterequest/#approval)CertificateRequests：
+
+> **注意**：除非使用 cert-manager-controller 上的标志禁用，否则内部 cert-manager 批准者可能会自动批准所有 CertificateRequests `--controllers=*,-certificaterequests-approver`
+
+```bash
+$ cmctl approve -n istio-system mesh-ca --reason "pki-team" --message "this certificate is valid"
+Approved CertificateRequest 'istio-system/mesh-ca'
+$ cmctl deny -n my-app my-app --reason "example.com" --message "violates policy"
+Denied CertificateRequest 'my-app/my-app'
+```
+
+### 兑换
+
+`cmctl convert`可用于在不同 API 版本之间转换 cert-manager 清单文件。接受 YAML 和 JSON 格式。该命令将文件名、目录路径或 URL 作为输入。内容转换为cert-manager已知的最新API版本格式，或者`--output-version`flag指定的格式。
+
+默认输出将以 YAML 格式打印到标准输出。可以使用该选项`-o`来更改输出目的地。
+
+例如，这将输出`cert.yaml`最新的 API 版本：
+
+```console
+cmctl convert -f cert.yaml
+```
+
+### 创建
+
+`cmctl create`可用于手动创建证书管理器资源。子命令可用于创建不同的资源：
+
+#### 证书请求
+
+要创建证书管理器 CertificateRequest，请使用`cmctl create certificaterequest`. 该命令采用要创建的 CertificateRequest 的名称，并根据`--from-certificate-file` flag指定的证书资源的 YAML 清单，通过在本地生成私钥并创建要提交的“证书签名请求”来创建新的 CertificateRequest 资源到证书管理器颁发者。私钥将写入本地文件，默认为`<name_of_cr>.key`，或者可以使用`--output-key-file`标志指定。
+
+如果您希望等待 CertificateRequest 签名并将 X.509 证书存储在文件中，您可以设置该`--fetch-certificate`标志。等待颁发证书时的默认超时时间为 5 分钟，但可以使用`--timeout`标志指定。存放X.509证书的文件的默认名称是`<name_of_cr>.crt`，您可以使用该`--output-certificate-file`标志来指定。
+
+请注意，私钥和 X.509 证书都写入文件，**并未**存储在 Kubernetes 中。
+
+例如，这将创建一个名为“my-cr”的 CertificateRequest 资源，该资源基于 中描述的 cert-manager 证书，`my-certificate.yaml`同时分别将私钥和 X.509 证书存储在`my-cr.key`和 中`my-cr.crt` 。
+
+```console
+cmctl create certificaterequest my-cr --from-certificate-file my-certificate.yaml --fetch-certificate --timeout 20m
+```
+
+### 更新
+
+`cmctl`允许您手动触发特定证书的续订。这可以使用标签选择器 ( `-l app=example`) 或使用`--all`标志一次完成一个证书：
+
+例如，您可以更新证书`example-com-tls`：
+
+```console
+$ kubectl get certificate
+NAME                       READY   SECRET               AGE
+example-com-tls            True    example-com-tls      1d
+
+$ cmctl renew example-com-tls
+Manually triggered issuance of Certificate default/example-com-tls
+
+$ kubectl get certificaterequest
+NAME                              READY   AGE
+example-com-tls-tls-8rbv2         False    10s
+```
+
+您还可以更新给定命名空间中的所有证书：
+
+```console
+$ cmctl renew --namespace=app --all
+```
+
+更新命令允许指定几个选项：
+
+- `--all` 更新给定命名空间中的所有证书，或与 `--all-namespaces`
+- `-A`或 `--all-namespaces`跨命名空间标记证书以进行续订
+- `-l` `--selector`允许设置标签查询以过滤以及`kubectl`像`--context`和这样的全局标志`--namespace`。
+
+### 身份证明
+
+`cmctl status certificate`如果是 ACME 证书，则输出证书资源和相关资源（如 CertificateRequest、Secret、Issuer 以及 Order 和 Challenges）的当前状态的详细信息。该命令输出有关资源的信息，包括条件、事件和资源特定字段，例如密钥用法和密钥的扩展密钥用法或订单的授权。这将有助于对证书进行故障排除。
+
+该命令接受一个参数，指定证书资源的名称，并且可以像往常一样使用`-n`或 `--namespace`标志指定命名空间。
+
+本示例查询命名`my-certificate`空间中命名的证书的状态`my-namespace`。
+
+```console
+cmctl status certificate my-certificate -n my-namespace
+```
+
+### 完成
+
+`cmctl` 支持两个子命令的自动完成以及运行时对象的建议。
+
+```console
+$ cmctl approve -n <TAB> <TAB>
+default             kube-node-lease     kube-public         kube-system         local-path-storage
+```
+
+可以按照您正在使用的 shell 的说明为您的环境安装 Completion。它目前支持 bash、fish、zsh 和 powershell。
+
+```console
+$ cmctl completion help
+```
+
+------
 
 ## jenkins 
 
