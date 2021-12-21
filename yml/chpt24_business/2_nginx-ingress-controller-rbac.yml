@@ -56,25 +56,18 @@ rules:
     verbs:
       - create
       - patch
-  - apiGroups:
-      - networking.k8s.io/v1
-      - extension  
-    resources:
-      - ingresses/status
-    verbs:
-      - update
-      - get
-      - list
-      - watch
+
   - apiGroups:
       - networking.k8s.io/v1
       - extension  
     resources:
       - ingressclasses
+      - ingresses/status
     verbs:
       - get
       - list
       - watch
+      - update
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
@@ -121,20 +114,13 @@ rules:  #角色的权限
       - extension  
     resources:
       - ingresses/status
+      - ingressclasses
     verbs:
       - update
       - get
       - list
       - watch
-  - apiGroups:
-      - networking.k8s.io
-      - extension  
-    resources:
-      - ingressclasses
-    verbs:
-      - get
-      - list
-      - watch
+  
   - apiGroups:
       - ''
     resources:
