@@ -46,186 +46,204 @@
 
 [kube-cert-manager](https://cert-manager.io/docs/installation/)
 
-### 安装
+## 概述
+
+随着 HTTPS 不断普及，大多数网站开始由 HTTP 升级到 HTTPS。使用 HTTPS 需要向权威机构申请证书，并且需要付出一定的成本，如果需求数量多，则开支也相对增加。cert-manager 是 Kubernetes 上的全能证书管理工具，支持利用 cert-manager 基于 [ACME](https://tools.ietf.org/html/rfc8555) 协议与 [Let's Encrypt](https://letsencrypt.org/) 签发免费证书并为证书自动续期，实现永久免费使用证书。
+
+## 操作原理
+
+### cert-manager 工作原理
+
+cert-manager 部署到 Kubernetes 集群后会查阅其所支持的自定义资源 CRD，可通过创建 CRD 资源来指示 cert-manager 签发证书并为证书自动续期。如下图所示：
+![img](./pic/f4e57b54c56515446c86ba05e7bc8f6c.svg)
+
+- Issuer/ClusterIssuer
+
+  ：用于指示 cert-manager 签发证书的方式，本文主要讲解签发免费证书的 ACME 方式。
+
+  > 说明：
+  >
+  > Issuer 与 ClusterIssuer 之间的区别是：Issuer 只能用来签发自身所在 namespace 下的证书，ClusterIssuer 可以签发任意 namespace 下的证书。
+
+- **Certificate**：用于向 cert-manager 传递域名证书的信息、签发证书所需要的配置，以及对 Issuer/ClusterIssuer 的引用。
+
+### 免费证书签发原理
+
+Let’s Encrypt 利用 ACME 协议校验域名的归属，校验成功后可以自动颁发免费证书。免费证书有效期只有90天，需在到期前再校验一次实现续期。使用 cert-manager 可以自动续期，即实现永久使用免费证书。校验域名归属的两种方式分别是 **HTTP-01** 和 **DNS-01**，校验原理详情可参见 [Let's Encrypt 的运作方式](https://letsencrypt.org/zh-cn/how-it-works/)。
+
+- HTTP-01 校验原理
+-  
+
+- DNS-01 校验原理
+
+HTTP-01 的校验原理是给域名指向的 HTTP 服务增加一个临时 location。此方法仅适用于给使用 Ingress 暴露流量的服务颁发证书，并且不支持泛域名证书。
+例如，Let’s Encrypt 会发送 HTTP 请求到 `http://<YOUR_DOMAIN>/.well-known/acme-challenge/<TOKEN>`。`YOUR_DOMAIN` 是被校验的域名。`TOKEN` 是 ACME 协议客户端负责放置的文件，在此处 ACME 客户端即 cert-manager，通过修改或创建 Ingress 规则来增加临时校验路径并指向提供 `TOKEN` 的服务。Let’s Encrypt 会对比 `TOKEN` 是否符合预期，校验成功后就会颁发证书。
+
+### 校验方式对比
+
+- HTTP-01 校验方式的优点是配置简单通用，不同 DNS 提供商均可使用相同的配置方法。缺点是需要依赖 Ingress，若仅适用于服务支持 Ingress 暴露流量，不支持泛域名证书。
+- DNS-01 校验方式的优点是不依赖 Ingress，并支持泛域名。缺点是不同 DNS 提供商的配置方式不同，DNS 提供商过多而 cert-manager 的 Issuer 不能全部支持。部分可以通过部署实现 cert-manager 的 [Webhook](https://cert-manager.io/docs/concepts/webhook/) 服务来扩展 Issuer 进行支持。例如 DNSPod 和 阿里 DNS，详情请参见 [Webhook 列表](https://cert-manager.io/docs/configuration/acme/dns01/#webhook)。
+
+本文向您推荐 `DNS-01` 方式，其限制较少，功能较全。
+
+## 操作步骤
+
+### 安装 cert-manager
+
+通常使用 yaml 方式一键安装 cert-manager 到集群，可参考官网文档 [Installing with regular manifests](https://cert-manager.io/docs/installation/kubernetes/#installing-with-regular-manifests)。
+cert-manager 官方使用的镜像在 `quay.io` 进行拉取。也可以执行以下命令，使用同步到国内 CCR 的镜像一键安装：
+
+> 注意：
+>
+> 使用这种方式要求集群版本不得低于1.16。
 
 
 
-您将在下方找到有关我们旨在支持并与本网站上的文档兼容的各种场景的详细信息。此外，下面针对每种情况列出了最适用的安装方法。
-
-#### 默认静态安装
-
-> 您不需要对 cert-manager 安装参数进行任何调整。
-
-默认静态配置可以安装如下：
-
-```bash
-$ kubectl apply -f https://github.com/jetstack/cert-manager/releases/download/v1.6.1/cert-manager.yaml
+```
+kubectl apply --validate=false -f https://raw.githubusercontent.com/TencentCloudContainerTeam/manifest/master/cert-manager/cert-manager.yaml
 ```
 
-[可以在此处找到](https://cert-manager.io/docs/installation/kubectl/)有关此安装方法的更多信息。
 
-### 入门
 
-> 您很快就想了解如何使用 cert-manager 以及它的用途。
+### 配置 DNS
 
-我们建议使用[cmctl x install](https://cert-manager.io/docs/installation/cmctl/)来快速安装 cert-manager 并从命令行[与 cert-manager 资源进行交互](https://cert-manager.io/docs/usage/cmctl/)。
+登录 DNS 提供商后台，配置域名的 DNS A 记录，指向所需要证书的后端服务对外暴露的 IP 地址。以 cloudflare 为例，如下图所示：
+![img](./pic/c133190ee796d15fb56b54e6b2417dc6.png)
 
-或者，如果您更喜欢 Helm 或者不想安装`cmctl`，则可以[使用 helm 安装 cert-manager](https://cert-manager.io/docs/installation/helm/)。
+### HTTP-01 校验方式签发证书
 
-如果您在 OpenShift 集群上运行，请考虑通过[OperatorHub.io](https://cert-manager.io/docs/installation/operator-lifecycle-manager/)上的[cert-manager 进行](https://cert-manager.io/docs/installation/operator-lifecycle-manager/)安装。
+若使用 HTTP-01 的校验方式，则需要用到 Ingress 来配合校验。cert-manager 会通过自动修改 Ingress 规则或自动新增 Ingress 来实现对外暴露校验所需的临时 HTTP 路径。为 Issuer 配置 HTTP-01 校验时，如果指定 Ingress 的 `name`，表示会自动修改指定 Ingress 的规则来暴露校验所需的临时 HTTP 路径，如果指定 `class`，则表示会自动新增 Ingress，可参考以下 [示例](https://cloud.tencent.com/document/product/457/49368#eg1)。
 
-### 持续部署
+TKE 自带的 Ingress 中，每个 Ingress 资源都会对应一个负载均衡 CLB，如果使用 TKE 自带的 Ingress 暴露服务，并且使用 HTTP-01 方式校验，那么只能使用自动修改 Ingress 的方式，不能自动新增 Ingress。自动新增的 Ingress 会自动创建其他 CLB，使对外的 IP 地址与后端服务的 Ingress 不一致，Let's Encrypt 校验时将无法从服务的 Ingress 找到校验所需的临时路径，从而导致校验失败，无法签发证书。如果使用自建 Ingress，例如 [在 TKE 上部署 Nginx Ingress](https://cloud.tencent.com/document/product/457/47293)，同一个 Ingress class 的 Ingress 共享同一个 CLB，则支持使用自动新增 Ingress 的方式。
 
-> 您知道如何配置您的证书管理器设置并希望自动执行此操作。
+#### 示例
 
-您可以使用`helm template`或`cmctl x install --dry-run`来生成自定义的 cert-manager 安装清单。有关更多详细信息，请参阅[使用 cmctl x install](https://cert-manager.io/docs/installation/cmctl/#output-yaml)[输出 YAML](https://cert-manager.io/docs/installation/helm/#output-yaml)和[使用 helm 模板输出 YAML](https://cert-manager.io/docs/installation/helm/#output-yaml)。这个模板化的证书管理器清单可以通过管道传输到您首选的部署工具中。
+如果服务使用 TKE 自带的 Ingress 暴露服务，则不适合用 cert-manager 签发管理免费证书，证书从 [证书管理](https://console.cloud.tencent.com/ssl) 中被引用，不在 Kubernetes 中管理。
+假设是 [在 TKE 上部署 Nginx Ingress](https://cloud.tencent.com/document/product/457/47293)，且后端服务的 Ingress 是 `prod/web`，可参考以下代码示例创建 Issuer：
 
-如果您使用 Helm 进行自动化，cert-manager[支持使用 Helm 进行安装](https://cert-manager.io/docs/installation/helm/)。
-
-### 安装cmctl
-
-您需要`cmctl.tar.gz`所用平台的文件，可以在我们的[GitHub 发布页面 上](https://github.com/jetstack/cert-manager/releases)找到这些文件 。为了使用`cmctl`你需要它的二进制文件可以`cmctl`在你的`$PATH`. 运行以下命令来设置 CLI。用您的系统等效物替换 OS 和 ARCH：
-
-```console
-OS=$(go env GOOS); ARCH=$(go env GOARCH); curl -L -o cmctl.tar.gz https://github.com/jetstack/cert-manager/releases/latest/download/cmctl-$OS-$ARCH.tar.gz
-tar xzf cmctl.tar.gz
-sudo mv cmctl /usr/local/bin
+```yaml
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: letsencrypt-http01
+  namespace: prod
+spec:
+  acme:
+    server: https://acme-v02.api.letsencrypt.org/directory
+    privateKeySecretRef:
+      name: letsencrypt-http01-account-key
+    solvers:
+    - http01:
+       ingress:
+         name: web # 指定被自动修改的 Ingress 名称
 ```
 
-您可以运行`cmctl help`以测试 CLI 是否设置正确：
+使用 Issuer 签发证书，cert-manager 会自动创建 Ingress 资源，并自动修改 Ingress 的资源 `prod/web`，以暴露校验所需的临时路径。参考以下代码示例，自动新增 Ingress：
 
-```console
-$ cmctl help
-
-cmctl is a CLI tool manage and configure cert-manager resources for Kubernetes
-
-Usage: cmctl [command]
-
-Available Commands:
-  approve      Approve a CertificateRequest
-  check        Check cert-manager components
-  completion   Generate completion scripts for the cert-manager CLI
-  convert      Convert cert-manager config files between different API versions
-  create       Create cert-manager resources
-  deny         Deny a CertificateRequest
-  experimental Interact with experimental features
-  help         Help about any command
-  inspect      Get details on certificate related resources
-  renew        Mark a Certificate for manual renewal
-  status       Get details on current status of cert-manager resources
-  version      Print the cert-manager CLI version and the deployed cert-manager version
-
-Flags:
-  -h, --help                           help for cmctl
-      --log-flush-frequency duration   Maximum number of seconds between log flushes (default 5s)
-
-Use "cmctl [command] --help" for more information about a command.
+```yaml
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: letsencrypt-http01
+  namespace: prod
+spec:
+  acme:
+    server: https://acme-v02.api.letsencrypt.org/directory
+    privateKeySecretRef:
+      name: letsencrypt-http01-account-key
+    solvers:
+    - http01:
+       ingress:
+         class: nginx # 指定自动创建的 Ingress 的 ingress class
 ```
 
-### 命令
 
-### 批准和拒绝证书请求
 
-可以 使用各自的 cmctl 命令[批准或拒绝](https://cert-manager.io/docs/concepts/certificaterequest/#approval)CertificateRequests：
+成功创建 Issuer 后，参考以下代码示例，创建 Certificate 并引用 Issuer 进行签发：
 
-> **注意**：除非使用 cert-manager-controller 上的标志禁用，否则内部 cert-manager 批准者可能会自动批准所有 CertificateRequests `--controllers=*,-certificaterequests-approver`
-
-```bash
-$ cmctl approve -n istio-system mesh-ca --reason "pki-team" --message "this certificate is valid"
-Approved CertificateRequest 'istio-system/mesh-ca'
-$ cmctl deny -n my-app my-app --reason "example.com" --message "violates policy"
-Denied CertificateRequest 'my-app/my-app'
+```yaml
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: test-mydomain-com
+  namespace: prod
+spec:
+  dnsNames:
+  - test.mydomain.com # 要签发证书的域名
+  issuerRef:
+    kind: Issuer
+    name: letsencrypt-http01 # 引用 Issuer，指示采用 http01 方式进行校验
+  secretName: test-mydomain-com-tls # 最终签发出来的证书会保存在这个 Secret 里面
 ```
 
-### 兑换
 
-`cmctl convert`可用于在不同 API 版本之间转换 cert-manager 清单文件。接受 YAML 和 JSON 格式。该命令将文件名、目录路径或 URL 作为输入。内容转换为cert-manager已知的最新API版本格式，或者`--output-version`flag指定的格式。
 
-默认输出将以 YAML 格式打印到标准输出。可以使用该选项`-o`来更改输出目的地。
+### DNS-01 校验方式签发证书
 
-例如，这将输出`cert.yaml`最新的 API 版本：
+若使用 DNS-01 的校验方式，则需要选择 DNS 提供商。cert-manager 内置 DNS 提供商的支持，详细列表和用法请参见 [Supported DNS01 providers](https://cert-manager.io/docs/configuration/acme/dns01/#supported-dns01-providers)。若需要使用列表外的 DNS 提供商，可参考以下两种方案：
 
-```console
-cmctl convert -f cert.yaml
+- 方案1：设置 Custom Nameserver
+-  
+
+- 方案2：使用 Webhook
+
+在 DNS 提供商后台设置 custom nameserver，指向例如 cloudflare 此类可管理其它 DNS 提供商域名的 nameserver 地址，具体地址可登录 cloudflare 后台查看。如下图所示：
+![img](./pic/9e07f843cae3ff5123442e7dc5b024d0.png)
+namecheap 可以设置 custom nameserver，如下图所示：
+![img](./pic/1ad9889154d2b4125cef8a41de26d413.png)
+最后配置 Issuer 指定 DNS-01 验证时，添加 cloudflare 的信息即可。
+
+### 获取和使用证书
+
+[创建 Certificate](https://cloud.tencent.com/document/product/457/49368#Certificate) 后，即可通过 kubectl 查看证书是否签发成功。
+
+```shell
+$ kubectl get certificate -n prod
+NAME                READY   SECRET                  AGE
+test-mydomain-com   True    test-mydomain-com-tls   1m
 ```
 
-### 创建
+- `READY` 为 `False`：则表示签发失败，可以通过 describe 命令查看 event 来排查失败原因
 
-`cmctl create`可用于手动创建证书管理器资源。子命令可用于创建不同的资源：
+  ```shell
+   kubectl describe certificate test-mydomain-com -n prod
+  ```
 
-#### 证书请求
+- `READY` 为 `True`：则表示签发成功，证书将保存在所指定的 Secret 中。例如，`default/test-mydomain-com-tls`。可以通过 kubectl 查看，其中 `tls.crt` 是证书，`tls.key` 是密钥。
 
-要创建证书管理器 CertificateRequest，请使用`cmctl create certificaterequest`. 该命令采用要创建的 CertificateRequest 的名称，并根据`--from-certificate-file` flag指定的证书资源的 YAML 清单，通过在本地生成私钥并创建要提交的“证书签名请求”来创建新的 CertificateRequest 资源到证书管理器颁发者。私钥将写入本地文件，默认为`<name_of_cr>.key`，或者可以使用`--output-key-file`标志指定。
+  ```shell
+  $ kubectl get secret test-mydomain-com-tls -n default
+  ...
+  data:
+    tls.crt: <cert>
+    tls.key: <private key>
+  ```
 
-如果您希望等待 CertificateRequest 签名并将 X.509 证书存储在文件中，您可以设置该`--fetch-certificate`标志。等待颁发证书时的默认超时时间为 5 分钟，但可以使用`--timeout`标志指定。存放X.509证书的文件的默认名称是`<name_of_cr>.crt`，您可以使用该`--output-certificate-file`标志来指定。
+  
 
-请注意，私钥和 X.509 证书都写入文件，**并未**存储在 Kubernetes 中。
+您可以将其挂载到需要证书的应用中，或者直接在自建的 Ingress 中引用 secret。可参考以下示例：
 
-例如，这将创建一个名为“my-cr”的 CertificateRequest 资源，该资源基于 中描述的 cert-manager 证书，`my-certificate.yaml`同时分别将私钥和 X.509 证书存储在`my-cr.key`和 中`my-cr.crt` 。
-
-```console
-cmctl create certificaterequest my-cr --from-certificate-file my-certificate.yaml --fetch-certificate --timeout 20m
+```yaml
+apiVersion: networking.k8s.io/v1beta1
+kind: Ingress
+metadata:
+  name: test-ingress
+  annotations:
+    kubernetes.io/Ingress.class: nginx
+spec:
+  rules:
+  - host: test.mydomain.com
+    http:
+      paths:
+      - path: /web
+        backend:
+          serviceName: web
+          servicePort: 80
+  tls:
+    hosts:
+    - test.mydomain.com
+    secretName: test-mydomain-com-tls
 ```
-
-### 更新
-
-`cmctl`允许您手动触发特定证书的续订。这可以使用标签选择器 ( `-l app=example`) 或使用`--all`标志一次完成一个证书：
-
-例如，您可以更新证书`example-com-tls`：
-
-```console
-$ kubectl get certificate
-NAME                       READY   SECRET               AGE
-example-com-tls            True    example-com-tls      1d
-
-$ cmctl renew example-com-tls
-Manually triggered issuance of Certificate default/example-com-tls
-
-$ kubectl get certificaterequest
-NAME                              READY   AGE
-example-com-tls-tls-8rbv2         False    10s
-```
-
-您还可以更新给定命名空间中的所有证书：
-
-```console
-$ cmctl renew --namespace=app --all
-```
-
-更新命令允许指定几个选项：
-
-- `--all` 更新给定命名空间中的所有证书，或与 `--all-namespaces`
-- `-A`或 `--all-namespaces`跨命名空间标记证书以进行续订
-- `-l` `--selector`允许设置标签查询以过滤以及`kubectl`像`--context`和这样的全局标志`--namespace`。
-
-### 身份证明
-
-`cmctl status certificate`如果是 ACME 证书，则输出证书资源和相关资源（如 CertificateRequest、Secret、Issuer 以及 Order 和 Challenges）的当前状态的详细信息。该命令输出有关资源的信息，包括条件、事件和资源特定字段，例如密钥用法和密钥的扩展密钥用法或订单的授权。这将有助于对证书进行故障排除。
-
-该命令接受一个参数，指定证书资源的名称，并且可以像往常一样使用`-n`或 `--namespace`标志指定命名空间。
-
-本示例查询命名`my-certificate`空间中命名的证书的状态`my-namespace`。
-
-```console
-cmctl status certificate my-certificate -n my-namespace
-```
-
-### 完成
-
-`cmctl` 支持两个子命令的自动完成以及运行时对象的建议。
-
-```console
-$ cmctl approve -n <TAB> <TAB>
-default             kube-node-lease     kube-public         kube-system         local-path-storage
-```
-
-可以按照您正在使用的 shell 的说明为您的环境安装 Completion。它目前支持 bash、fish、zsh 和 powershell。
-
-```console
-$ cmctl completion help
-```
-
-------
 
 ## jenkins 
 
