@@ -1,0 +1,38 @@
+# 创建对象签发证书
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: justbeta-pro-certificate
+  namespace: default
+spec:
+  secretName: justbeta-pro-secret # 证书保存在这个 secret 中
+  issuerRef:
+    name: dnspod # 这里使用自动生成出来的 ClusterIssuer
+    kind: ClusterIssuer
+    group: cert-manager.io
+  dnsNames: # 填入需要签发证书的域名列表，支持泛域名，确保域名是使用 dnspod 管理的
+  - "*.justbeta.pro"
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: ingress-http-tomcat
+  namespace: default
+  annotations:
+    kubernetes.io/ingress.class: "nginx"
+spec:
+  tls:
+  - hosts:
+    -  demon.justbeta.pro
+    secretName: justbeta-pro-secret
+  rules:
+  - host: tomcat.lucky.com
+    http:
+      paths:
+      - path: /
+        pathType:  Prefix
+        backend:
+         service:
+           name: tomcat
+           port:
+            number: 8080

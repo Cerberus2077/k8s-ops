@@ -1,0 +1,12 @@
+# 参考链接 https://imroc.cc/k8s/trick/cert-manager-webhook-dnspod/
+# 使用方法 
+# 1. helm repo add roc https://charts.imroc.cc 
+# 2. helm upgrade --install -f 7_dnspod_web-hook.yaml cert-manager-webhook-dnspod roc/cert-manager-webhook-dnspod -n cert-manage-certificater
+clusterIssuer:
+  enabled: true
+  name: dnspod # 自动创建的 ClusterIssuer 名称
+  ttl: 600
+  staging: false
+  secretId: 'AKIDUovnQowpTr0usb5IGzThv0rSnwrWw5zf' # 替换成你的 SecretId
+  secretKey: 'UiiTzFF0XopbDahYAXeV7UcV8WfZDdoj' # 替换成你的 SecretKey
+  email: shangxianjiang@gmail.com # 用于接收证书过期的邮件告警。如果cert-manager和webhook都正常工作，证书会自动续期不会过期
