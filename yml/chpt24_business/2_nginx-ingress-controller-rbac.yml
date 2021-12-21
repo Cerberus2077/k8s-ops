@@ -42,6 +42,7 @@ rules:
       - watch
   - apiGroups:
       - networking.k8s.io
+      - extension  
     resources:
       - ingresses
     verbs:
@@ -57,12 +58,17 @@ rules:
       - patch
   - apiGroups:
       - networking.k8s.io/v1
+      - extension  
     resources:
       - ingresses/status
     verbs:
       - update
+      - get
+      - list
+      - watch
   - apiGroups:
       - networking.k8s.io/v1
+      - extension  
     resources:
       - ingressclasses
     verbs:
@@ -103,6 +109,7 @@ rules:  #角色的权限
       - watch
   - apiGroups:
       - networking.k8s.io
+      - extension  
     resources:
       - ingresses
     verbs:
@@ -111,12 +118,17 @@ rules:  #角色的权限
       - watch
   - apiGroups:
       - networking.k8s.io
+      - extension  
     resources:
       - ingresses/status
     verbs:
       - update
+      - get
+      - list
+      - watch
   - apiGroups:
       - networking.k8s.io
+      - extension  
     resources:
       - ingressclasses
     verbs:

@@ -26,7 +26,7 @@ spec:
     -  demon.justbeta.pro
     secretName: justbeta-pro-secret
   rules:
-  - host: tomcat.lucky.com
+  - host: demon.justbeta.pro
     http:
       paths:
       - path: /
