@@ -356,7 +356,8 @@ systemctl  enable kubelet && systemctl start kubelet
   sudo tee /etc/docker/daemon.json <<-'EOF'
   {
     "registry-mirrors": ["https://2c2nqqhp.mirror.aliyuncs.com"],
-    "exec-opts": ["native.cgroupdriver=systemd"]
+    "exec-opts": ["native.cgroupdriver=systemd"],
+    "insecure-registries": ["harbor.justbeta.pro"]
   }
   EOF
   yum install -y docker-ce docker-ce-cli containerd.io
