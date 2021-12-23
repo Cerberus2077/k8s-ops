@@ -19,7 +19,7 @@ spec:
       - name: registry-pull-secret
       containers:
       - name: order
-        image: 192.168.40.62/order:v1
+        image: harbor.justbeta.pro/ms/order:v1
         imagePullPolicy: IfNotPresent 
         ports:
           - protocol: TCP
