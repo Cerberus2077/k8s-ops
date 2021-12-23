@@ -1,40 +1,40 @@
 apiVersion: apps/v1
 kind: Deployment 
 metadata:
-  name: stock
+  name: product
   namespace: ms 
 spec:
   replicas: 1
   selector:
     matchLabels:
       project: ms
-      app: stock
+      app: product
   template:
     metadata:
       labels:
         project: ms 
-        app: stock
+        app: product
     spec:
       imagePullSecrets:
       - name: registry-pull-secret
       containers:
-      - name: stock
-        image: 192.168.1.62/microservice/stock:v1
+      - name: product
+        image: harbor.justbeta.pro/ms/product:1.0
         imagePullPolicy: IfNotPresent 
         ports:
           - protocol: TCP
-            containerPort: 8030
+            containerPort: 8010 
         resources:
           limits:
             cpu: 1
             memory: 1Gi
         readinessProbe:
           tcpSocket:
-            port: 8030
+            port: 8010
           initialDelaySeconds: 60
           periodSeconds: 10
         livenessProbe:
           tcpSocket:
-            port: 8030
+            port: 8010
           initialDelaySeconds: 60
           periodSeconds: 10
