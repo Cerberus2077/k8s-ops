@@ -239,7 +239,8 @@ spec:
       paths:
       - path: /web
         backend:
-          serviceName: web
+          service:
+web
           servicePort: 80
   tls:
     hosts:

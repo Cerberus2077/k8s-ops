@@ -401,7 +401,7 @@ metadata:  #元数据
 spec: #pod容器总的详细定义
   containers: # 容器列表
   - image: nginx  # 容器镜像
-    imagePullPolicy: Always  # 容器拉取策略 [Always | Never | IfNotPresent] Alawys 表示下载镜像 IfnotPresent 表示优先使用本地镜像，否则下载镜像，Nerver 表示仅使用本地镜像
+    imagePullPolicy: IfNotPresent   # 容器拉取策略 [Always | Never | IfNotPresent] Alawys 表示下载镜像 IfnotPresent 表示优先使用本地镜像，否则下载镜像，Nerver 表示仅使用本地镜像
     name: my-nginx  # 容器名字 
     ports:  # 暴露的端口
     - containerPort: 80  

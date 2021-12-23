@@ -4,7 +4,8 @@ metadata:
   name: es-cluster
   namespace: kube-logging
 spec:
-  serviceName: elasticsearch
+  service:
+elasticsearch
   replicas: 3
   selector:
     matchLabels:

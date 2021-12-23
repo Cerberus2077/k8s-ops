@@ -1,0 +1,68 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: portal 
+  namespace: ms 
+spec:
+  rules:
+    - host: portal.justbeta.pro
+      http:
+        paths:
+        - path: /
+          backend:
+            serviceName: portal 
+            servicePort: 8080
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: portal
+  namespace: ms
+spec:
+  ports:
+  - port: 8080
+    name: portal 
+  selector:
+    project: ms
+    app: portal
+---
+apiVersion: apps/v1
+kind: Deployment 
+metadata:
+  name: portal
+  namespace: ms 
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      project: ms
+      app: portal
+  template:
+    metadata:
+      labels:
+        project: ms 
+        app: portal
+    spec:
+      imagePullSecrets:
+      - name: registry-pull-secret
+      containers:
+      - name: portal
+        image: 192.168.40.62/portal:v1
+        imagePullPolicy: IfNotPresent 
+        ports:
+          - protocol: TCP
+            containerPort: 8080 
+        resources:
+          limits:
+            cpu: 1
+            memory: 1Gi
+        readinessProbe:
+          tcpSocket:
+            port: 8080
+          initialDelaySeconds: 60
+          periodSeconds: 10
+        livenessProbe:
+          tcpSocket:
+            port: 8080
+          initialDelaySeconds: 60
+          periodSeconds: 10

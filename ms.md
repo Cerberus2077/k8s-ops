@@ -7,11 +7,11 @@ kubectl create ns ms  # 创建一个名称空间
 kubectl create secret docker-registry registry-pull-secret --docker-server=harbor服务器 --docker-username=用户名 --docker-password=密码 -n ms
 ```
 
-## habor准备工作
+# habor准备工作
 
 在harbor上创建一个用来存放为服务镜像的项目
 
-![image-20211223144754436](/Users/luca/Documents/文稿/k8s-ops/pic/image-20211223144754436.png)
+![image-20211223144754436](./pic/image-20211223144754436.png)
 
 ## 镜像制作
 
@@ -133,7 +133,8 @@ spec:
     matchLabels:         #标签选择器
       project: ms
       app: eureka
-  serviceName: "eureka"
+  service:
+"eureka"
   template:
     metadata:
       labels:          # 模板中的标签
@@ -190,3 +191,38 @@ eureka-1   1/1     Running   0          12m
 eureka-2   1/1     Running   0          11m
 ```
 
+# gateway准备工作
+
+## 制作镜像
+
+```bash
+[root@master gateway-service]# docker build  -t  harbor.justbeta.pro/ms/gateway:1.0  .
+Sending build context to Docker daemon  43.45MB
+Step 1/5 : FROM java:8-jdk-alpine
+ ---> 3fd9dd82815c
+Step 2/5 : RUN  apk add -U tzdata &&      ln -sf /usr/share/zoneinfo/Asia/Shanghai /etc/localtime
+ ---> Using cache
+ ---> ce4b371c50f8
+Step 3/5 : COPY ./target/gateway-service.jar ./
+ ---> 6dd2740cd6db
+Step 4/5 : EXPOSE 9999
+ ---> Running in 039224c63c93
+Removing intermediate container 039224c63c93
+ ---> 214f32518415
+Step 5/5 : CMD java -jar /gateway-service.jar
+ ---> Running in 4a5302e38094
+Removing intermediate container 4a5302e38094
+ ---> 41226a01b7cd
+Successfully built 41226a01b7cd
+Successfully tagged harbor.justbeta.pro/ms/gateway:1.0
+[root@master gateway-service]# docker push  harbor.justbeta.pro/ms/gateway:1.0
+The push refers to repository [harbor.justbeta.pro/ms/gateway]
+b15114959965: Pushed
+91db4a229c92: Mounted from ms/eureka
+a1e7033f082e: Mounted from ms/eureka
+78075328e0da: Mounted from ms/eureka
+9f8566ee5135: Mounted from ms/eureka
+1.0: digest: sha256:70cfc3c12545097e14f41087ffc8f699056e9ae29637dceec881f9cdd598ce8a size: 1370
+```
+
+![image-20211223181837736](./pic/image-20211223181837736.png)

@@ -551,7 +551,8 @@ spec:
     http:
       paths:
       - backend:
-          serviceName: service1
+          service:
+service1
           servicePort: 80
         path: /foo
         pathType: Prefix
@@ -559,7 +560,8 @@ spec:
     http:
       paths:
       - backend:
-          serviceName: service2
+          service:
+service2
           servicePort: 80
         path: /foo
         pathType: Prefix
