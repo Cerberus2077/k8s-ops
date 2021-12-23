@@ -56,7 +56,14 @@ spec:
       containers:
       - name: gateway
         image: harbor.justbeta.pro/ms/gateway:1.0
-        imagePullPolicy: IfNotPresent 
+        imagePullPolicy: IfNotPresent
+        resources:       #资源申请限制
+          requests:      #最低需求资源
+            cpu: 0.12
+            memory: 256Mi
+          limits:       #限制最高资源
+            cpu: 0.25 
+            memory: 257Mi
         ports:
           - protocol: TCP
             containerPort: 9999 
