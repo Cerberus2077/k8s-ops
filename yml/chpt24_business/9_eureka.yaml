@@ -1,0 +1,87 @@
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: eureka 
+  namespace: ms 
+  annotations:           #注解信息
+    kubernetes.io/ingress.class: "nginx"
+spec:
+  rules:
+    - host: eureka.justbeta.pro   # ingress 规则 
+      http:
+        paths:
+        - path: /
+          pathType:  Prefix
+          backend:
+            service:           # 后端服务
+              name: eureka
+              port:
+                number: 8888
+---
+apiVersion: v1           # 服务资源
+kind: Service
+metadata:
+  name: eureka
+  namespace: ms
+spec:
+  clusterIP: None
+  ports:
+  - port: 8888
+    name: eureka 
+  selector:
+    project: ms
+    app: eureka
+
+---
+
+apiVersion: apps/v1     # 有状态服务
+kind: StatefulSet
+metadata:
+  name: eureka
+  namespace: ms 
+spec:
+  replicas: 1
+  selector:
+    matchLabels:         #标签选择器
+      project: ms
+      app: eureka
+  serviceName: "eureka"
+  template:
+    metadata:
+      labels:          # 模板中的标签
+        project: ms 
+        app: eureka
+    spec:
+      imagePullSecrets:
+      - name: registry-pull-secret
+      containers:
+      - name: eureka
+        image: harbor.justbeta.pro/ms/eureka:1.0
+        imagePullPolicy: IfNotPresent   # 不存在就拉取
+        ports:
+          - protocol: TCP
+            containerPort: 8888
+        env:
+          - name: MY_POD_NAME
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.name
+        resources:       #资源申请限制
+          requests:      #最低需求资源
+            cpu: 0.5
+            memory: 256Mi
+          limits:       #限制最高资源
+            cpu: 1 
+            memory: 1Gi
+        readinessProbe:   # 服务可用性探测
+          tcpSocket:
+            port: 8888
+          initialDelaySeconds: 60
+          periodSeconds: 10
+        livenessProbe:    # 存活性探测
+          tcpSocket:
+            port: 8888
+          initialDelaySeconds: 60
+          periodSeconds: 10
+
