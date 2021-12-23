@@ -40,7 +40,7 @@ metadata:
   name: gateway
   namespace: ms 
 spec:
-  replicas: 1
+  replicas: 2
   selector:
     matchLabels:
       project: ms
@@ -60,10 +60,10 @@ spec:
         resources:       #资源申请限制
           requests:      #最低需求资源
             cpu: 0.12
-            memory: 256Mi
+            memory: 128Mi
           limits:       #限制最高资源
             cpu: 0.25 
-            memory: 257Mi
+            memory: 400Mi
         ports:
           - protocol: TCP
             containerPort: 9999 

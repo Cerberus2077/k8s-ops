@@ -158,7 +158,7 @@ spec:
         resources:       #资源申请限制
           requests:      #最低需求资源
             cpu: 0.5
-            memory: 256Mi
+            memory: 128Mi
           limits:       #限制最高资源
             cpu: 1 
             memory: 1Gi

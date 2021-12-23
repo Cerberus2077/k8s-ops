@@ -60,7 +60,7 @@ metadata:
   name: eureka
   namespace: ms 
 spec:
-  replicas: 1
+  replicas: 2
   selector:
     matchLabels:         #标签选择器
       project: ms
@@ -86,13 +86,13 @@ spec:
             valueFrom:
               fieldRef:
                 fieldPath: metadata.name
-        resources:       #资源申请限制
-          requests:      #最低需求资源
-            cpu: 0.12
+        resources:
+          requests:
+            cpu: 0.5
             memory: 256Mi
-          limits:       #限制最高资源
-            cpu: 0.25 
-            memory: 257Mi
+          limits:
+            cpu: 1
+            memory: 1Gi
         readinessProbe:   # 服务可用性探测
           tcpSocket:
             port: 8888
