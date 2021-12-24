@@ -3,6 +3,8 @@ kind: Ingress
 metadata:
   name: portal 
   namespace: ms 
+  annotations:           #注解信息
+    kubernetes.io/ingress.class: "nginx"  
 spec:
   tls:
   - hosts:
@@ -54,7 +56,7 @@ spec:
       - name: registry-pull-secret
       containers:
       - name: portal
-        image: harbor.justbeta.pro/ms/portal:1.0
+        image: harbor.justbeta.pro/ms/portal:1.1
         imagePullPolicy: IfNotPresent 
         ports:
           - protocol: TCP
