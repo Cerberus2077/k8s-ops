@@ -92,7 +92,7 @@ spec:
             memory: 256Mi
           limits:
             cpu: 1
-            memory: 1Gi
+            memory: 512Mi
         readinessProbe:   # 服务可用性探测
           tcpSocket:
             port: 8888
