@@ -40,7 +40,7 @@ metadata:
   name: gateway
   namespace: ms 
 spec:
-  replicas: 2
+  replicas: 1
   selector:
     matchLabels:
       project: ms
@@ -59,21 +59,14 @@ spec:
         imagePullPolicy: IfNotPresent
         resources:       #资源申请限制
           requests:      #最低需求资源
-            cpu: 0.12
+            cpu: 0.2
             memory: 128Mi
           limits:       #限制最高资源
-            cpu: 0.25 
-            memory: 400Mi
+            cpu: 0.5 
+            memory: 1Gi
         ports:
           - protocol: TCP
             containerPort: 9999 
-        resources:
-          requests:
-            cpu: 0.2
-            memory: 128Mi
-          limits:
-            cpu: 1
-            memory: 1Gi
         readinessProbe:
           tcpSocket:
             port: 9999
