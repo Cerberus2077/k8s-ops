@@ -32,7 +32,7 @@ spec:
   - ReadWriteMany
   nfs:
     server: 192.168.187.145
-    path: /opt/nfs
+    path: /var/lib/fileshare
 ---
 kind: PersistentVolumeClaim
 apiVersion: v1
