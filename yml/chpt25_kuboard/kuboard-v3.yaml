@@ -215,7 +215,7 @@ spec:
           envFrom:
             - configMapRef:
                 name: kuboard-v3-config
-          image: 'eipwork/kuboard:v3'
+          image: 'eipwork/kuboard:v3.3.0.3'
           imagePullPolicy: Always
           livenessProbe:
             failureThreshold: 3
