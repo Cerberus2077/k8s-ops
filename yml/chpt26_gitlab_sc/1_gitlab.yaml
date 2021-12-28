@@ -1,0 +1,85 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  labels:
+    kubernetes.io/metadata.name: gitlab
+  name: gitlab
+spec:
+  finalizers:
+  - kubernetes
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: gitlab-provisioner
+  namespace: gitlab
+---
+kind: Deployment
+apiVersion: apps/v1
+metadata:
+  name: gitlab-provisioner
+  namespace: gitlab
+spec:
+  selector:
+    matchLabels:
+       app: gitlab-provisioner
+  replicas: 4
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app: gitlab-provisioner
+    spec:
+      serviceAccount: gitlab-provisioner
+      containers:
+        - name: gitlab-provisioner
+          image: registry.cn-beijing.aliyuncs.com/mydlq/nfs-subdir-external-provisioner:v4.0.0
+          imagePullPolicy: IfNotPresent
+          volumeMounts:
+            - name: nfs-client-root
+              mountPath: /persistentvolumes
+          env:
+            - name: PROVISIONER_NAME
+              value: justbeta.pro/nfs
+            - name: NFS_SERVER
+              value: 192.168.187.145
+            - name: NFS_PATH
+              value: /opt/nfs 
+      volumes:
+        - name: nfs-client-root
+          nfs:
+            server: 192.168.187.145
+            path: /opt/nfs
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: gitlab-k8s
+spec:
+  capacity:
+    storage: 10Gi
+  accessModes:
+  - ReadWriteMany
+  nfs:
+    server: 192.168.187.145
+    path: /opt/nfs
+
+---
+kind: PersistentVolumeClaim
+apiVersion: v1
+metadata:
+  name: gitlab-chaim
+spec:
+  accessModes:  ["ReadWriteMany"]
+  resources:
+    requests:
+      storage: 1Gi
+  storageClassName:  nfs
+---
+kind: StorageClass
+apiVersion: storage.k8s.io/v1
+metadata:
+  name: nfs
+provisioner: justbeta.pro/nfs
+---
