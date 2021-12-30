@@ -23,7 +23,6 @@ spec:
       annotations:
         prometheus.io/scrape: 'false'
     spec:
-      nodeName: node2
       serviceAccountName: monitor
       containers:
       - name: prometheus
