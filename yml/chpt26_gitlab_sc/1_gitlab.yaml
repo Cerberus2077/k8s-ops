@@ -1,8 +1,6 @@
 apiVersion: v1
 kind: Namespace
 metadata:
-  labels:
-    kubernetes.io/metadata.name: gitlab
   name: gitlab
 spec:
   finalizers:
@@ -14,43 +12,21 @@ metadata:
   name: gitlab-provisioner
   namespace: gitlab
 ---
-kind: Deployment
-apiVersion: apps/v1
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
 metadata:
+  annotations:
+    kubectl.kubernetes.io/last-applied-configuration: |
+      {"apiVersion":"rbac.authorization.k8s.io/v1","kind":"ClusterRoleBinding","metadata":{"annotations":{},"creationTimestamp":"2021-12-18T14:22:22Z","name":"gitlab-k8s-sa-cluster"},"roleRef":{"apiGroup":"rbac.authorization.k8s.io","kind":"ClusterRole","name":"cluster-admin"},"subjects":[{"kind":"ServiceAccount","name":"gitlab-k8s-sa","namespace":"ms"}]}
+  name: gitlab-provisioner
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: cluster-admin
+subjects:
+- kind: ServiceAccount
   name: gitlab-provisioner
   namespace: gitlab
-spec:
-  selector:
-    matchLabels:
-       app: gitlab-provisioner
-  replicas: 4
-  strategy:
-    type: Recreate
-  template:
-    metadata:
-      labels:
-        app: gitlab-provisioner
-    spec:
-      serviceAccount: gitlab-provisioner
-      containers:
-        - name: gitlab-provisioner
-          image: registry.cn-beijing.aliyuncs.com/mydlq/nfs-subdir-external-provisioner:v4.0.0
-          imagePullPolicy: IfNotPresent
-          volumeMounts:
-            - name: nfs-client-root
-              mountPath: /persistentvolumes
-          env:
-            - name: PROVISIONER_NAME
-              value: justbeta.pro/nfs
-            - name: NFS_SERVER
-              value: 192.168.187.145
-            - name: NFS_PATH
-              value: /opt/nfs 
-      volumes:
-        - name: nfs-client-root
-          nfs:
-            server: 192.168.187.145
-            path: /opt/nfs
 ---
 apiVersion: v1
 kind: PersistentVolume
@@ -63,23 +39,108 @@ spec:
   - ReadWriteMany
   nfs:
     server: 192.168.187.145
-    path: /opt/nfs
-
----
-kind: PersistentVolumeClaim
-apiVersion: v1
+    path: /var/lib/fileshare
+--- 
+kind: Deployment
+apiVersion: apps/v1
 metadata:
-  name: gitlab-chaim
+  name: justbeta.pro-nfs
+  namespace: gitlab
 spec:
-  accessModes:  ["ReadWriteMany"]
-  resources:
-    requests:
-      storage: 1Gi
-  storageClassName:  nfs
----
-kind: StorageClass
+  selector:
+    matchLabels:
+       app: gitlab-provisioner-nfs
+  replicas: 1
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app: gitlab-provisioner-nfs
+    spec:
+      serviceAccount: gitlab-provisioner-nfs
+      containers:
+        - name: gitlab-provisioner-nfs
+          image: registry.cn-beijing.aliyuncs.com/mydlq/nfs-subdir-external-provisioner:v4.0.0
+          imagePullPolicy: IfNotPresent
+          volumeMounts:
+            - name: nfs-client-root
+              mountPath: /persistentvolumes
+          env:
+            - name: PROVISIONER_NAME
+              value: gitlab-provisioner-nfs
+            - name: NFS_SERVER
+              value: 192.168.187.145
+            - name: NFS_PATH
+              value: /var/lib/fileshare 
+      volumes:
+        - name: nfs-client-root
+          nfs:
+            server: 192.168.187.145
+            path: /var/lib/fileshare
+
+--- # 使用sc来创建pvc
 apiVersion: storage.k8s.io/v1
+kind: StorageClass
 metadata:
-  name: nfs
-provisioner: justbeta.pro/nfs
----
+  name: gitlab-nfs
+provisioner: gitlab-provisioner-nfs
+
+--- #定义一个使用sc的gitlab
+kind: Deployment
+apiVersion: apps/v1
+metadata:
+  name: gitlab
+  namespace: gitlab
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: gitlab
+  template:
+    metadata:
+      labels:
+        app: gitlab
+    spec:
+      serviceAccount: gitlab-k8s-sa
+      containers:
+      - name: gitlab
+        image:  
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 8080
+          name: web
+          protocol: TCP
+        - containerPort: 50000
+          name: agent
+          protocol: TCP
+        resources:
+          limits:
+            cpu: 1000m
+            memory: 1Gi
+          requests:
+            cpu: 500m
+            memory: 400Mi
+        livenessProbe:
+          httpGet:
+            path: /login
+            port: 8080
+          initialDelaySeconds: 60
+          timeoutSeconds: 5
+          failureThreshold: 12
+        readinessProbe:
+          httpGet:
+            path: /login
+            port: 8080
+          initialDelaySeconds: 60
+          timeoutSeconds: 5
+          failureThreshold: 12
+        volumeMounts:
+        - name: gitlab-volume
+          subPath: gitlab-home
+          mountPath: /var/gitlab_home
+      volumes:
+      - name: gitlab-volume
+        persistentVolumeClaim:
+          claimName: gitlab-k8s-pvc
+
