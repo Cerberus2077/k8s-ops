@@ -230,7 +230,7 @@ spec:
           name: tmp-dir
 
 ---
-apiVersion: policy/v1beta1
+apiVersion: policy/v1
 kind: PodDisruptionBudget
 metadata:
   name: metrics-server
@@ -526,21 +526,54 @@ metadata:
 spec:
   ports:
     - name: web
-      nodePort: 30080
       port: 80
       protocol: TCP
-      targetPort: 80
     - name: tcp
-      nodePort: 30081
       port: 10081
       protocol: TCP
-      targetPort: 10081
     - name: udp
-      nodePort: 30081
       port: 10081
       protocol: UDP
-      targetPort: 10081
   selector:
     k8s.kuboard.cn/name: kuboard-v3
   sessionAffinity: None
-  type: NodePort
+  type: ClusterIP
+--- # 证书
+# 创建对象签发证书
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: justbeta-pro-certificate
+  namespace: kuboard
+spec:
+  secretName: justbeta-pro-secret # 证书保存在这个 secret 中
+  issuerRef:
+    name: dnspod # 这里使用自动生成出来的 ClusterIssuer
+    kind: ClusterIssuer
+    group: cert-manager.io
+  dnsNames: # 填入需要签发证书的域名列表，支持泛域名，确保域名是使用 dnspod 管理的
+  - "*.justbeta.pro"
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: ingress-https-jenkins
+  namespace: kuboard
+  annotations:
+    kubernetes.io/ingress.class: "nginx"
+spec:
+  tls:
+  - hosts:
+    -  kuboard.justbeta.pro
+    secretName: justbeta-pro-secret
+  rules:
+  - host: kuboard.justbeta.pro
+    http:
+      paths:
+      - path: /
+        pathType:  Prefix
+        backend: 
+         service:
+           name: kuboard-v3
+           port:
+            number: 80
