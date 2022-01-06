@@ -47,6 +47,9 @@ spec:
           initialDelaySeconds: 60
           timeoutSeconds: 5
           failureThreshold: 12
+        env:
+         - name: TZ
+           value: "Asia/Shanghai"
         volumeMounts:
         - name: jenkins-volume
           subPath: jenkins-home
