@@ -23,7 +23,7 @@ spec:
       annotations:
         prometheus.io/scrape: 'false'
     spec:
-      serviceAccountName: monitor
+      serviceAccountName: kube-state-metrics
       containers:
       - name: prometheus
         image: prom/prometheus:v2.27.1

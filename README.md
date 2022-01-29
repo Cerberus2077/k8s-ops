@@ -814,3 +814,577 @@ $ kubectl taint nodes foo dedicated=special-user:NoSchedule
 | `--v=6`  | 显示请求的资源。                                             |
 | `--v=7`  | 显示HTTP请求的header。                                       |
 | `--v=8`  | 显示HTTP请求的内容。                                         |
+
+# k8s 初始化
+
+## 使用 kubeadm 创建一个高可用 etcd 集群
+
+**说明：**
+
+在本指南中，当 kubeadm 用作为外部 etcd 节点管理工具，请注意 kubeadm 不计划支持此类节点的证书更换或升级。对于长期规划是使用 [etcdadm](https://github.com/kubernetes-sigs/etcdadm) 增强工具来管理这方面。
+
+默认情况下，kubeadm 运行单成员的 etcd 集群，该集群由控制面节点上的 kubelet 以静态 Pod 的方式进行管理。由于 etcd 集群只包含一个成员且不能在任一成员不可用时保持运行，所以这不是一种高可用设置。本任务，将告诉你如何在使用 kubeadm 创建一个 kubernetes 集群时创建一个外部 etcd：有三个成员的高可用 etcd 集群。
+
+### 准备开始
+
+- 三个可以通过 2379 和 2380 端口相互通信的主机。本文档使用这些作为默认端口。不过，它们可以通过 kubeadm 的配置文件进行自定义。
+
+- 每个主机必须 [安装有 docker、kubelet 和 kubeadm](https://kubernetes.io/docs/setup/production-environment/tools/kubeadm/install-kubeadm/)。
+
+- 一些可以用来在主机间复制文件的基础设施。例如 `ssh` 和 `scp` 就可以满足需求。
+
+### 建立集群
+
+一般来说，是在一个节点上生成所有证书并且只分发这些*必要*的文件到其它节点上。
+
+**说明：**
+
+kubeadm 包含生成下述证书所需的所有必要的密码学工具；在这个例子中，不需要其他加密工具。
+
+1. 将 kubelet 配置为 etcd 的服务管理器。
+
+   
+
+   **说明：** 你必须在要运行 etcd 的所有主机上执行此操作。
+
+   由于 etcd 是首先创建的，因此你必须通过创建具有更高优先级的新文件来覆盖 kubeadm 提供的 kubelet 单元文件。
+
+   
+
+   ```sh
+   cat << EOF > /etc/systemd/system/kubelet.service.d/20-etcd-service-manager.conf
+   [Service]
+   ExecStart=
+   # 将下面的 "systemd" 替换为你的容器运行时所使用的 cgroup 驱动。
+   # kubelet 的默认值为 "cgroupfs"。
+   ExecStart=/usr/bin/kubelet --address=127.0.0.1 --pod-manifest-path=/etc/kubernetes/manifests --cgroup-driver=systemd
+   Restart=always
+   EOF
+   
+   systemctl daemon-reload
+   systemctl restart kubelet
+   ```
+
+   检查 kubelet 的状态以确保其处于运行状态：
+
+   ```shell
+   systemctl status kubelet
+   ```
+
+1. 为 kubeadm 创建配置文件。
+
+   使用以下脚本为每个将要运行 etcd 成员的主机生成一个 kubeadm 配置文件。
+
+   ```sh
+   # 使用 IP 或可解析的主机名替换 HOST0、HOST1 和 HOST2
+   export HOST0=10.0.0.6
+   export HOST1=10.0.0.7
+   export HOST2=10.0.0.8
+   
+   # 创建临时目录来存储将被分发到其它主机上的文件
+   mkdir -p /tmp/${HOST0}/ /tmp/${HOST1}/ /tmp/${HOST2}/
+   
+   ETCDHOSTS=(${HOST0} ${HOST1} ${HOST2})
+   NAMES=("infra0" "infra1" "infra2")
+   
+   for i in "${!ETCDHOSTS[@]}"; do
+   HOST=${ETCDHOSTS[$i]}
+   NAME=${NAMES[$i]}
+   cat << EOF > /tmp/${HOST}/kubeadmcfg.yaml
+   apiVersion: "kubeadm.k8s.io/v1beta3"
+   kind: ClusterConfiguration
+   etcd:
+       local:
+           serverCertSANs:
+           - "${HOST}"
+           peerCertSANs:
+           - "${HOST}"
+           extraArgs:
+               initial-cluster: infra0=https://${ETCDHOSTS[0]}:2380,infra1=https://${ETCDHOSTS[1]}:2380,infra2=https://${ETCDHOSTS[2]}:2380
+               initial-cluster-state: new
+               name: ${NAME}
+               listen-peer-urls: https://${HOST}:2380
+               listen-client-urls: https://${HOST}:2379
+               advertise-client-urls: https://${HOST}:2379
+               initial-advertise-peer-urls: https://${HOST}:2380
+   EOF
+   done
+   ```
+
+1. 生成证书颁发机构
+
+   如果你已经拥有 CA，那么唯一的操作是复制 CA 的 `crt` 和 `key` 文件到 `etc/kubernetes/pki/etcd/ca.crt` 和 `/etc/kubernetes/pki/etcd/ca.key`。 复制完这些文件后继续下一步，“为每个成员创建证书”。
+
+   如果你还没有 CA，则在 `$HOST0`（你为 kubeadm 生成配置文件的位置）上运行此命令。
+
+   ```
+   kubeadm init phase certs etcd-ca
+   ```
+
+   这一操作创建如下两个文件
+
+   - `/etc/kubernetes/pki/etcd/ca.crt`
+   - `/etc/kubernetes/pki/etcd/ca.key`
+
+1. 为每个成员创建证书
+
+   ```shell
+   kubeadm init phase certs etcd-server --config=/tmp/${HOST2}/kubeadmcfg.yaml
+   kubeadm init phase certs etcd-peer --config=/tmp/${HOST2}/kubeadmcfg.yaml
+   kubeadm init phase certs etcd-healthcheck-client --config=/tmp/${HOST2}/kubeadmcfg.yaml
+   kubeadm init phase certs apiserver-etcd-client --config=/tmp/${HOST2}/kubeadmcfg.yaml
+   cp -R /etc/kubernetes/pki /tmp/${HOST2}/
+   # 清理不可重复使用的证书
+   find /etc/kubernetes/pki -not -name ca.crt -not -name ca.key -type f -delete
+   
+   kubeadm init phase certs etcd-server --config=/tmp/${HOST1}/kubeadmcfg.yaml
+   kubeadm init phase certs etcd-peer --config=/tmp/${HOST1}/kubeadmcfg.yaml
+   kubeadm init phase certs etcd-healthcheck-client --config=/tmp/${HOST1}/kubeadmcfg.yaml
+   kubeadm init phase certs apiserver-etcd-client --config=/tmp/${HOST1}/kubeadmcfg.yaml
+   cp -R /etc/kubernetes/pki /tmp/${HOST1}/
+   find /etc/kubernetes/pki -not -name ca.crt -not -name ca.key -type f -delete
+   
+   kubeadm init phase certs etcd-server --config=/tmp/${HOST0}/kubeadmcfg.yaml
+   kubeadm init phase certs etcd-peer --config=/tmp/${HOST0}/kubeadmcfg.yaml
+   kubeadm init phase certs etcd-healthcheck-client --config=/tmp/${HOST0}/kubeadmcfg.yaml
+   kubeadm init phase certs apiserver-etcd-client --config=/tmp/${HOST0}/kubeadmcfg.yaml
+   # 不需要移动 certs 因为它们是给 HOST0 使用的
+   
+   # 清理不应从此主机复制的证书
+   find /tmp/${HOST2} -name ca.key -type f -delete
+   find /tmp/${HOST1} -name ca.key -type f -delete
+   ```
+
+1. 复制证书和 kubeadm 配置
+
+   证书已生成，现在必须将它们移动到对应的主机。
+
+   ```shell
+   USER=ubuntu
+   HOST=${HOST1}
+   scp -r /tmp/${HOST}/* ${USER}@${HOST}:
+   ssh ${USER}@${HOST}
+   USER@HOST $ sudo -Es
+   root@HOST $ chown -R root:root pki
+   root@HOST $ mv pki /etc/kubernetes/
+   ```
+
+1. 确保已经所有预期的文件都存在
+
+   `$HOST0` 所需文件的完整列表如下：
+
+   ```none
+   /tmp/${HOST0}
+   └── kubeadmcfg.yaml
+   ---
+   /etc/kubernetes/pki
+   ├── apiserver-etcd-client.crt
+   ├── apiserver-etcd-client.key
+   └── etcd
+       ├── ca.crt
+       ├── ca.key
+       ├── healthcheck-client.crt
+       ├── healthcheck-client.key
+       ├── peer.crt
+       ├── peer.key
+       ├── server.crt
+       └── server.key
+   ```
+
+   在 `$HOST1` 上：
+
+   ```
+   $HOME
+   └── kubeadmcfg.yaml
+   ---
+   /etc/kubernetes/pki
+   ├── apiserver-etcd-client.crt
+   ├── apiserver-etcd-client.key
+   └── etcd
+       ├── ca.crt
+       ├── healthcheck-client.crt
+       ├── healthcheck-client.key
+       ├── peer.crt
+       ├── peer.key
+       ├── server.crt
+       └── server.key
+   ```
+
+   在 `$HOST2` 上：
+
+   ```
+   $HOME
+   └── kubeadmcfg.yaml
+   ---
+   /etc/kubernetes/pki
+   ├── apiserver-etcd-client.crt
+   ├── apiserver-etcd-client.key
+   └── etcd
+       ├── ca.crt
+       ├── healthcheck-client.crt
+       ├── healthcheck-client.key
+       ├── peer.crt
+       ├── peer.key
+       ├── server.crt
+       └── server.key
+   ```
+
+1. 创建静态 Pod 清单
+
+   既然证书和配置已经就绪，是时候去创建清单了。 在每台主机上运行 `kubeadm` 命令来生成 etcd 使用的静态清单。
+
+   ```shell
+   root@HOST0 $ kubeadm init phase etcd local --config=/tmp/${HOST0}/kubeadmcfg.yaml
+   root@HOST1 $ kubeadm init phase etcd local --config=/tmp/${HOST1}/kubeadmcfg.yaml
+   root@HOST2 $ kubeadm init phase etcd local --config=/tmp/${HOST2}/kubeadmcfg.yaml
+   ```
+
+1. 可选：检查群集运行状况
+
+   ```shell
+   docker run --rm -it \
+   --net host \
+   -v /etc/kubernetes:/etc/kubernetes k8s.gcr.io/etcd:${ETCD_TAG} etcdctl \
+   --cert /etc/kubernetes/pki/etcd/peer.crt \
+   --key /etc/kubernetes/pki/etcd/peer.key \
+   --cacert /etc/kubernetes/pki/etcd/ca.crt \
+   --endpoints https://${HOST0}:2379 endpoint health --cluster
+   ...
+   https://[HOST0 IP]:2379 is healthy: successfully committed proposal: took = 16.283339ms
+   https://[HOST1 IP]:2379 is healthy: successfully committed proposal: took = 19.44402ms
+   https://[HOST2 IP]:2379 is healthy: successfully committed proposal: took = 35.926451ms
+   ```
+
+   - 将 `${ETCD_TAG}` 设置为你的 etcd 镜像的版本标签，例如 `3.4.3-0`。 要查看 kubeadm 使用的 etcd 镜像和标签，请执行 `kubeadm config images list --kubernetes-version ${K8S_VERSION}`， 例如，其中的 `${K8S_VERSION}` 可以是 `v1.17.0`。
+   - 将 `${HOST0}` 设置为要测试的主机的 IP 地址。
+
+## 利用 kubeadm 创建高可用集群
+
+本文讲述了使用 kubeadm 设置一个高可用的 Kubernetes 集群的两种不同方式：
+
+- 使用具有堆叠的控制平面节点。这种方法所需基础设施较少。etcd 成员和控制平面节点位于同一位置。
+- 使用外部集群。这种方法所需基础设施较多。控制平面的节点和 etcd 成员是分开的。
+
+在下一步之前，你应该仔细考虑哪种方法更好的满足你的应用程序和环境的需求。 [这是对比文档](https://kubernetes.io/zh/docs/setup/production-environment/tools/kubeadm/ha-topology/) 讲述了每种方法的优缺点。
+
+如果你在安装 HA 集群时遇到问题，请在 kubeadm [问题跟踪](https://github.com/kubernetes/kubeadm/issues/new)里向我们提供反馈。
+
+你也可以阅读 [升级文件](https://kubernetes.io/zh/docs/tasks/administer-cluster/kubeadm/kubeadm-upgrade/)
+
+**注意：** 这篇文档没有讲述在云提供商上运行集群的问题。在云环境中，此处记录的方法不适用于类型为 LoadBalancer 的服务对象，或者具有动态的 PersistentVolumes。
+
+## 准备开始
+
+对于这两种方法，你都需要以下基础设施：
+
+- 配置满足 [kubeadm 的最低要求](https://kubernetes.io/zh/docs/setup/production-environment/tools/kubeadm/install-kubeadm/#before-you-begin) 的三台机器作为控制面节点
+- 配置满足 [kubeadm 的最低要求](https://kubernetes.io/zh/docs/setup/production-environment/tools/kubeadm/install-kubeadm/#before-you-begin) 的三台机器作为工作节点
+- 在集群中，确保所有计算机之间存在全网络连接（公网或私网）
+- 在所有机器上具有 sudo 权限
+- 从某台设备通过 SSH 访问系统中所有节点的能力
+- 所有机器上已经安装 `kubeadm` 和 `kubelet`，`kubectl` 是可选的。
+
+仅对于外部 etcd 集群来说，你还需要：
+
+- 给 etcd 成员使用的另外三台机器
+
+## 这两种方法的第一步
+
+### 为 kube-apiserver 创建负载均衡器
+
+**说明：**
+
+使用负载均衡器需要许多配置。你的集群搭建可能需要不同的配置。 下面的例子只是其中的一方面配置。
+
+1. 创建一个名为 kube-apiserver 的负载均衡器解析 DNS。
+   - 在云环境中，应该将控制平面节点放置在 TCP 后面转发负载平衡。 该负载均衡器将流量分配给目标列表中所有运行状况良好的控制平面节点。 API 服务器的健康检查是在 kube-apiserver 的监听端口（默认值 `:6443`） 上进行的一个 TCP 检查。
+   - 不建议在云环境中直接使用 IP 地址。
+   - 负载均衡器必须能够在 API 服务器端口上与所有控制平面节点通信。 它还必须允许其监听端口的入站流量。
+   - 确保负载均衡器的地址始终匹配 kubeadm 的 `ControlPlaneEndpoint` 地址。
+   - 阅读[软件负载平衡选项指南](https://git.k8s.io/kubeadm/docs/ha-considerations.md#options-for-software-load-balancing)以获取更多详细信息。
+
+1. 添加第一个控制平面节点到负载均衡器并测试连接：
+
+   ```shell
+   nc -v LOAD_BALANCER_IP PORT
+   ```
+
+   - 由于 apiserver 尚未运行，预期会出现一个连接拒绝错误。 然而超时意味着负载均衡器不能和控制平面节点通信。 如果发生超时，请重新配置负载均衡器与控制平面节点进行通信。
+
+2. 将其余控制平面节点添加到负载均衡器目标组。
+
+## 使用堆控制平面和 etcd 节点
+
+### 控制平面节点的第一步
+
+1. 初始化控制平面：
+
+   ```shell
+   sudo kubeadm init --control-plane-endpoint "LOAD_BALANCER_DNS:LOAD_BALANCER_PORT" --upload-certs
+   ```
+
+   - 你可以使用 `--kubernetes-version` 标志来设置要使用的 Kubernetes 版本。 建议将 kubeadm、kebelet、kubectl 和 Kubernetes 的版本匹配。
+   - 这个 `--control-plane-endpoint` 标志应该被设置成负载均衡器的地址或 DNS 和端口。
+   - 这个 `--upload-certs` 标志用来将在所有控制平面实例之间的共享证书上传到集群。 如果正好相反，你更喜欢手动地通过控制平面节点或者使用自动化 工具复制证书，请删除此标志并参考如下部分[证书分配手册](https://kubernetes.io/zh/docs/setup/production-environment/tools/kubeadm/high-availability/#manual-certs)。
+
+   **说明：**
+
+   ```
+   标志 `kubeadm init`、`--config` 和 `--certificate-key` 不能混合使用，
+   因此如果你要使用
+   [kubeadm 配置](/docs/reference/config-api/kubeadm-config.v1beta3/)，你必须在相应的配置文件
+   （位于 `InitConfiguration` 和 `JoinConfiguration: controlPlane`）添加 `certificateKey` 字段。
+   ```
+
+   **说明：**
+
+   ```
+   一些 CNI 网络插件如 Calico 需要 CIDR 例如 `192.168.0.0/16` 和一些像 Weave 没有。参考
+   [CNI 网络文档](/zh/docs/setup/production-environment/tools/kubeadm/create-cluster-kubeadm/#pod-network)。
+   通过传递 `--pod-network-cidr` 标志添加 pod CIDR，或者你可以使用 kubeadm
+   配置文件，在 `ClusterConfiguration` 的 `networking` 对象下设置 `podSubnet` 字段。
+   ```
+
+   - 输出类似于：
+
+     ```sh
+     ...
+     You can now join any number of control-plane node by running the following command on each as a root:
+     kubeadm join 192.168.0.200:6443 --token 9vr73a.a8uxyaju799qwdjv --discovery-token-ca-cert-hash sha256:7c2e69131a36ae2a042a339b33381c6d0d43887e2de83720eff5359e26aec866 --control-plane --certificate-key f8902e114ef118304e561c3ecd4d0b543adc226b7a07f675f56564185ffe0c07
+     
+     Please note that the certificate-key gives access to cluster sensitive data, keep it secret!
+     As a safeguard, uploaded-certs will be deleted in two hours; If necessary, you can use kubeadm init phase upload-certs to reload certs afterward.
+     
+     Then you can join any number of worker nodes by running the following on each as root:
+       kubeadm join 192.168.0.200:6443 --token 9vr73a.a8uxyaju799qwdjv --discovery-token-ca-cert-hash sha256:7c2e69131a36ae2a042a339b33381c6d0d43887e2de83720eff5359e26aec866
+     ```
+
+   - 将此输出复制到文本文件。 稍后你将需要它来将控制平面节点和工作节点加入集群。
+
+   - 当 `--upload-certs` 与 `kubeadm init` 一起使用时，主控制平面的证书 被加密并上传到 `kubeadm-certs` Secret 中。
+
+   - 要重新上传证书并生成新的解密密钥，请在已加入集群节点的控制平面上使用以下命令：
+
+     ```shell
+     sudo kubeadm init phase upload-certs --upload-certs
+     ```
+
+   - 你还可以在 `init` 期间指定自定义的 `--certificate-key`，以后可以由 `join` 使用。 要生成这样的密钥，可以使用以下命令：
+
+     ```shell
+     kubeadm certs certificate-key
+     ```
+
+   **说明：**
+
+   ```
+   `kubeadm-certs` 密钥和解密密钥会在两个小时后失效。
+   ```
+
+   **注意：**
+
+   ```
+   正如命令输出中所述，证书密钥可访问群集敏感数据。请妥善保管！
+   ```
+
+1. 应用你所选择的 CNI 插件： [请遵循以下指示](https://kubernetes.io/zh/docs/setup/production-environment/tools/kubeadm/create-cluster-kubeadm/#pod-network) 安装 CNI 提供程序。如果适用，请确保配置与 kubeadm 配置文件中指定的 Pod CIDR 相对应。
+
+   在此示例中，我们使用 Weave Net：
+
+   ```shell
+   kubectl apply -f "https://cloud.weave.works/k8s/net?k8s-version=$(kubectl version | base64 | tr -d '\n')"
+   ```
+
+1. 输入以下内容，并查看控制平面组件的 Pods 启动：
+
+   ```shell
+   kubectl get pod -n kube-system -w
+   ```
+
+### 其余控制平面节点的步骤
+
+**说明：**
+
+从 kubeadm 1.15 版本开始，你可以并行加入多个控制平面节点。 在此版本之前，你必须在第一个节点初始化后才能依序的增加新的控制平面节点。
+
+对于每个其他控制平面节点，你应该：
+
+1. 执行先前由第一个节点上的 `kubeadm init` 输出提供给你的 join 命令。 它看起来应该像这样：
+
+   ```sh
+   sudo kubeadm join 192.168.0.200:6443 --token 9vr73a.a8uxyaju799qwdjv --discovery-token-ca-cert-hash sha256:7c2e69131a36ae2a042a339b33381c6d0d43887e2de83720eff5359e26aec866 --control-plane --certificate-key f8902e114ef118304e561c3ecd4d0b543adc226b7a07f675f56564185ffe0c07
+   ```
+
+   - 这个 `--control-plane` 命令通知 `kubeadm join` 创建一个新的控制平面。
+   - `--certificate-key ...` 将导致从集群中的 `kubeadm-certs` Secret 下载 控制平面证书并使用给定的密钥进行解密。
+
+## 外部 etcd 节点
+
+使用外部 etcd 节点设置集群类似于用于堆叠 etcd 的过程， 不同之处在于你应该首先设置 etcd，并在 kubeadm 配置文件中传递 etcd 信息。
+
+### 设置 ectd 集群
+
+1. 按照 [这些指示](https://kubernetes.io/zh/docs/setup/production-environment/tools/kubeadm/setup-ha-etcd-with-kubeadm/) 去设置 etcd 集群。
+
+2. 根据[这里](https://kubernetes.io/zh/docs/setup/production-environment/tools/kubeadm/high-availability/#manual-certs)的描述配置 SSH。
+
+3. 将以下文件从集群中的任何 etcd 节点复制到第一个控制平面节点：
+
+   ```shell
+   export CONTROL_PLANE="ubuntu@10.0.0.7"
+   scp /etc/kubernetes/pki/etcd/ca.crt "${CONTROL_PLANE}":
+   scp /etc/kubernetes/pki/apiserver-etcd-client.crt "${CONTROL_PLANE}":
+   scp /etc/kubernetes/pki/apiserver-etcd-client.key "${CONTROL_PLANE}":
+   ```
+
+   - 用第一台控制平面机的 `user@host` 替换 `CONTROL_PLANE` 的值。
+
+### 设置第一个控制平面节点
+
+1. 用以下内容创建一个名为 `kubeadm-config.yaml` 的文件：
+
+   ```yaml
+   apiVersion: kubeadm.k8s.io/v1beta2
+   kind: ClusterConfiguration
+   kubernetesVersion: stable
+   controlPlaneEndpoint: "LOAD_BALANCER_DNS:LOAD_BALANCER_PORT"
+   etcd:
+       external:
+           endpoints:
+           - https://ETCD_0_IP:2379
+           - https://ETCD_1_IP:2379
+           - https://ETCD_2_IP:2379
+           caFile: /etc/kubernetes/pki/etcd/ca.crt
+           certFile: /etc/kubernetes/pki/apiserver-etcd-client.crt
+           keyFile: /etc/kubernetes/pki/apiserver-etcd-client.key
+   ```
+
+   **说明：**
+
+   ```
+   这里的内部（stacked） etcd 和外部 etcd 之前的区别在于设置外部 etcd
+   需要一个 `etcd` 的 `external` 对象下带有 etcd 端点的配置文件。
+   如果是内部 etcd，是自动管理的。
+   ```
+
+   - 在你的集群中，将配置模板中的以下变量替换为适当值：
+     - `LOAD_BALANCER_DNS`
+     - `LOAD_BALANCER_PORT`
+     - `ETCD_0_IP`
+     - `ETCD_1_IP`
+     - `ETCD_2_IP`
+
+以下的步骤与设置内置 etcd 的集群是相似的：
+
+1. 在节点上运行 `sudo kubeadm init --config kubeadm-config.yaml --upload-certs` 命令。
+
+2. 记下输出的 join 命令，这些命令将在以后使用。
+
+3. 应用你选择的 CNI 插件。以下示例适用于 Weave Net：
+
+   ```shell
+   kubectl apply -f "https://cloud.weave.works/k8s/net?k8s-version=$(kubectl version | base64 | tr -d '\n')"
+   ```
+
+### 其他控制平面节点的步骤
+
+步骤与设置内置 etcd 相同：
+
+- 确保第一个控制平面节点已完全初始化。
+- 使用保存到文本文件的 join 命令将每个控制平面节点连接在一起。 建议一次加入一个控制平面节点。
+- 不要忘记默认情况下，`--certificate-key` 中的解密秘钥会在两个小时后过期。
+
+## 列举控制平面之后的常见任务
+
+### 安装工作节点
+
+你可以使用之前存储的 `kubeadm init` 命令的输出将工作节点加入集群中：
+
+```sh
+sudo kubeadm join 192.168.0.200:6443 --token 9vr73a.a8uxyaju799qwdjv --discovery-token-ca-cert-hash sha256:7c2e69131a36ae2a042a339b33381c6d0d43887e2de83720eff5359e26aec866
+```
+
+## 手动证书分发
+
+如果你选择不将 `kubeadm init` 与 `--upload-certs` 命令一起使用， 则意味着你将必须手动将证书从主控制平面节点复制到 将要加入的控制平面节点上。
+
+有许多方法可以实现这种操作。在下面的例子中我们使用 `ssh` 和 `scp`：
+
+如果要在单独的一台计算机控制所有节点，则需要 SSH。
+
+1. 在你的主设备上启用 ssh-agent，要求该设备能访问系统中的所有其他节点：
+
+   ```shell
+   eval $(ssh-agent)
+   ```
+
+1. 将 SSH 身份添加到会话中：
+
+   ```shell
+   ssh-add ~/.ssh/path_to_private_key
+   ```
+
+1. 检查节点间的 SSH 以确保连接是正常运行的
+
+   - SSH 到任何节点时，请确保添加 `-A` 标志：
+
+     ```shell
+     ssh -A 10.0.0.7
+     ```
+
+   - 当在任何节点上使用 sudo 时，请确保保持环境变量设置，以便 SSH 转发能够正常工作：
+
+     ```shell
+     sudo -E -s
+     ```
+
+1. 在所有节点上配置 SSH 之后，你应该在运行过 `kubeadm init` 命令的第一个 控制平面节点上运行以下脚本。 该脚本会将证书从第一个控制平面节点复制到另一个控制平面节点：
+
+   在以下示例中，用其他控制平面节点的 IP 地址替换 `CONTROL_PLANE_IPS`。
+
+   ```sh
+   USER=ubuntu # 可定制
+   CONTROL_PLANE_IPS="10.0.0.7 10.0.0.8"
+   for host in ${CONTROL_PLANE_IPS}; do
+       scp /etc/kubernetes/pki/ca.crt "${USER}"@$host:
+       scp /etc/kubernetes/pki/ca.key "${USER}"@$host:
+       scp /etc/kubernetes/pki/sa.key "${USER}"@$host:
+       scp /etc/kubernetes/pki/sa.pub "${USER}"@$host:
+       scp /etc/kubernetes/pki/front-proxy-ca.crt "${USER}"@$host:
+       scp /etc/kubernetes/pki/front-proxy-ca.key "${USER}"@$host:
+       scp /etc/kubernetes/pki/etcd/ca.crt "${USER}"@$host:etcd-ca.crt
+       scp /etc/kubernetes/pki/etcd/ca.key "${USER}"@$host:etcd-ca.key
+   done
+   ```
+
+   **注意：**
+
+   只需要复制上面列表中的证书。kubeadm 将负责生成其余证书以及加入控制平面实例所需的 SAN。 如果你错误地复制了所有证书，由于缺少所需的 SAN，创建其他节点可能会失败。
+
+1. 然后，在每个即将加入集群的控制平面节点上，你必须先运行以下脚本，然后 再运行 `kubeadm join`。 该脚本会将先前复制的证书从主目录移动到 `/etc/kubernetes/pki`：
+
+   ```shell
+   USER=ubuntu # 可定制
+   mkdir -p /etc/kubernetes/pki/etcd
+   mv /home/${USER}/ca.crt /etc/kubernetes/pki/
+   mv /home/${USER}/ca.key /etc/kubernetes/pki/
+   mv /home/${USER}/sa.pub /etc/kubernetes/pki/
+   mv /home/${USER}/sa.key /etc/kubernetes/pki/
+   mv /home/${USER}/front-proxy-ca.crt /etc/kubernetes/pki/
+   mv /home/${USER}/front-proxy-ca.key /etc/kubernetes/pki/
+   mv /home/${USER}/etcd-ca.crt /etc/kubernetes/pki/etcd/ca.crt
+   mv /home/${USER}/etcd-ca.key /etc/kubernetes/pki/etcd/ca.key
+   ```
+
+# pod清理
+
+```sh
+ podman system prune --all --volumes
+WARNING! This will remove:
+        - all stopped containers
+        - all networks not used by at least one container
+        - all volumes not used by at least one container
+        - all images without at least one container associated to them
+        - all build cache
+```
+

@@ -130,3 +130,8 @@ dmypy.json
 yml/.DS_Store
 *.gz
 *.tar
+Dockerfile/pipline
+Dockerfile/.DS_Store
+.DS_Store
+yml/nexttao-apple-prod.yaml
+.DS_Store
