@@ -1376,7 +1376,9 @@ sudo kubeadm join 192.168.0.200:6443 --token 9vr73a.a8uxyaju799qwdjv --discovery
    mv /home/${USER}/etcd-ca.key /etc/kubernetes/pki/etcd/ca.key
    ```
 
-# pod清理
+# 常规命令
+
+## podman/docker清理
 
 ```sh
  podman system prune --all --volumes
@@ -1388,3 +1390,844 @@ WARNING! This will remove:
         - all build cache
 ```
 
+```shell
+$ k get pv -n kuboard
+NAME              CAPACITY   ACCESS MODES   RECLAIM POLICY   STATUS        CLAIM                          STORAGECLASS                   REASON   AGE
+nfs-pv-efk        5Gi        RWX            Retain           Terminating   kube-system/nfs-pvc-efk        nfs-storageclass-provisioner            23h
+nfs-pv-nfsshare   5Gi        RWX            Retain           Terminating   kube-system/nfs-pvc-nfsshare   nfs-storageclass-provisioner            25h
+$ kubectl patch pv pvname -p '{"metadata":{"finalizers":null}}'
+$ kubectl patch pvc  pvcname -p '{"metadata":{"finalizers":null}}'
+```
+
+## 强制删除pod 
+
+```shell
+--force --grace-period=0
+```
+
+# helm  安装
+
+```sh
+helm repo add stable https://charts.ost.ai
+```
+
+添加镜像源
+
+## 三大概念
+
+*Chart* 代表着 Helm 包。它包含在 Kubernetes 集群内部运行应用程序，工具或服务所需的所有资源定义。你可以把它看作是 Homebrew formula，Apt dpkg，或 Yum RPM 在Kubernetes 中的等价物。
+
+*Repository（仓库）* 是用来存放和共享 charts 的地方。它就像 Perl 的 [CPAN 档案库网络](https://www.cpan.org/) 或是 Fedora 的 [软件包仓库](https://src.fedoraproject.org/)，只不过它是供 Kubernetes 包所使用的。
+
+*Release* 是运行在 Kubernetes 集群中的 chart 的实例。一个 chart 通常可以在同一个集群中安装多次。每一次安装都会创建一个新的 *release*。以 MySQL chart为例，如果你想在你的集群中运行两个数据库，你可以安装该chart两次。每一个数据库都会拥有它自己的 *release* 和 *release name*。
+
+在了解了上述这些概念以后，我们就可以这样来解释 Helm：
+
+Helm 安装 *charts* 到 Kubernetes 集群中，每次安装都会创建一个新的 *release*。你可以在 Helm 的 chart *repositories* 中寻找新的 chart。
+
+## helm search'：查找 Charts
+
+Helm 自带一个强大的搜索命令，可以用来从两种来源中进行搜索：
+
+- `helm search hub` 从 [Artifact Hub](https://artifacthub.io/) 中查找并列出 helm charts。 Artifact Hub中存放了大量不同的仓库。
+- `helm search repo` 从你添加（使用 `helm repo add`）到本地 helm 客户端中的仓库中进行查找。该命令基于本地数据进行搜索，无需连接互联网。
+
+你可以通过运行 `helm search hub` 命令找到公开可用的charts：
+
+```fallback
+$ helm search hub wordpress
+URL                                                 CHART VERSION APP VERSION DESCRIPTION
+https://hub.helm.sh/charts/bitnami/wordpress        7.6.7         5.2.4       Web publishing platform for building blogs and ...
+https://hub.helm.sh/charts/presslabs/wordpress-...  v0.6.3        v0.6.3      Presslabs WordPress Operator Helm Chart
+https://hub.helm.sh/charts/presslabs/wordpress-...  v0.7.1        v0.7.1      A Helm chart for deploying a WordPress site on ...
+```
+
+上述命令从 Artifact Hub 中搜索所有的 `wordpress` charts。
+
+如果不进行过滤，`helm search hub` 命令会展示所有可用的 charts。
+
+使用 `helm search repo` 命令，你可以从你所添加的仓库中查找chart的名字。
+
+```fallback
+$ helm repo add brigade https://brigadecore.github.io/charts
+"brigade" has been added to your repositories
+$ helm search repo brigade
+NAME                          CHART VERSION APP VERSION DESCRIPTION
+brigade/brigade               1.3.2         v1.2.1      Brigade provides event-driven scripting of Kube...
+brigade/brigade-github-app    0.4.1         v0.2.1      The Brigade GitHub App, an advanced gateway for...
+brigade/brigade-github-oauth  0.2.0         v0.20.0     The legacy OAuth GitHub Gateway for Brigade
+brigade/brigade-k8s-gateway   0.1.0                     A Helm chart for Kubernetes
+brigade/brigade-project       1.0.0         v1.0.0      Create a Brigade project
+brigade/kashti                0.4.0         v0.4.0      A Helm chart for Kubernetes
+```
+
+Helm 搜索使用模糊字符串匹配算法，所以你可以只输入名字的一部分：
+
+```fallback
+$ helm search repo kash
+NAME            CHART VERSION APP VERSION DESCRIPTION
+brigade/kashti  0.4.0         v0.4.0      A Helm chart for Kubernetes
+```
+
+搜索是用来发现可用包的一个好办法。一旦你找到你想安装的 helm 包，你便可以通过使用 `helm install` 命令来安装它。
+
+## 'helm install'：安装一个 helm 包
+
+使用 `helm install` 命令来安装一个新的 helm 包。最简单的使用方法只需要传入两个参数：你命名的release名字和你想安装的chart的名称。
+
+```fallback
+$ helm install happy-panda bitnami/wordpress
+NAME: happy-panda
+LAST DEPLOYED: Tue Jan 26 10:27:17 2021
+NAMESPACE: default
+STATUS: deployed
+REVISION: 1
+NOTES:
+** Please be patient while the chart is being deployed **
+
+Your WordPress site can be accessed through the following DNS name from within your cluster:
+
+    happy-panda-wordpress.default.svc.cluster.local (port 80)
+
+To access your WordPress site from outside the cluster follow the steps below:
+
+1. Get the WordPress URL by running these commands:
+
+  NOTE: It may take a few minutes for the LoadBalancer IP to be available.
+        Watch the status with: 'kubectl get svc --namespace default -w happy-panda-wordpress'
+
+   export SERVICE_IP=$(kubectl get svc --namespace default happy-panda-wordpress --template "{{ range (index .status.loadBalancer.ingress 0) }}{{.}}{{ end }}")
+   echo "WordPress URL: http://$SERVICE_IP/"
+   echo "WordPress Admin URL: http://$SERVICE_IP/admin"
+
+2. Open a browser and access WordPress using the obtained URL.
+
+3. Login with the following credentials below to see your blog:
+
+  echo Username: user
+  echo Password: $(kubectl get secret --namespace default happy-panda-wordpress -o jsonpath="{.data.wordpress-password}" | base64 --decode)
+```
+
+现在`wordpress` chart 已经安装。注意安装chart时创建了一个新的 *release* 对象。上述发布被命名为 `happy-panda`。 （如果想让Helm生成一个名称，删除发布名称并使用`--generate-name`。）
+
+在安装过程中，`helm` 客户端会打印一些有用的信息，其中包括：哪些资源已经被创建，release当前的状态，以及你是否还需要执行额外的配置步骤。
+
+Helm按照以下顺序安装资源：
+
+- Namespace
+- NetworkPolicy
+- ResourceQuota
+- LimitRange
+- PodSecurityPolicy
+- PodDisruptionBudget
+- ServiceAccount
+- Secret
+- SecretList
+- ConfigMap
+- StorageClass
+- PersistentVolume
+- PersistentVolumeClaim
+- CustomResourceDefinition
+- ClusterRole
+- ClusterRoleList
+- ClusterRoleBinding
+- ClusterRoleBindingList
+- Role
+- RoleList
+- RoleBinding
+- RoleBindingList
+- Service
+- DaemonSet
+- Pod
+- ReplicationController
+- ReplicaSet
+- Deployment
+- HorizontalPodAutoscaler
+- StatefulSet
+- Job
+- CronJob
+- Ingress
+- APIService
+
+Helm 客户端不会等到所有资源都运行才退出。许多 charts 需要大小超过 600M 的 Docker 镜像，可能需要很长时间才能安装到集群中。
+
+你可以使用 `helm status` 来追踪 release 的状态，或是重新读取配置信息：
+
+```fallback
+$ helm status happy-panda
+NAME: happy-panda
+LAST DEPLOYED: Tue Jan 26 10:27:17 2021
+NAMESPACE: default
+STATUS: deployed
+REVISION: 1
+NOTES:
+** Please be patient while the chart is being deployed **
+
+Your WordPress site can be accessed through the following DNS name from within your cluster:
+
+    happy-panda-wordpress.default.svc.cluster.local (port 80)
+
+To access your WordPress site from outside the cluster follow the steps below:
+
+1. Get the WordPress URL by running these commands:
+
+  NOTE: It may take a few minutes for the LoadBalancer IP to be available.
+        Watch the status with: 'kubectl get svc --namespace default -w happy-panda-wordpress'
+
+   export SERVICE_IP=$(kubectl get svc --namespace default happy-panda-wordpress --template "{{ range (index .status.loadBalancer.ingress 0) }}{{.}}{{ end }}")
+   echo "WordPress URL: http://$SERVICE_IP/"
+   echo "WordPress Admin URL: http://$SERVICE_IP/admin"
+
+2. Open a browser and access WordPress using the obtained URL.
+
+3. Login with the following credentials below to see your blog:
+
+  echo Username: user
+  echo Password: $(kubectl get secret --namespace default happy-panda-wordpress -o jsonpath="{.data.wordpress-password}" | base64 --decode)
+```
+
+上述信息展示了 release 的当前状态。
+
+### 安装前自定义 chart
+
+上述安装方式只会使用 chart 的默认配置选项。很多时候，我们需要自定义 chart 来指定我们想要的配置。
+
+使用 `helm show values` 可以查看 chart 中的可配置选项：
+
+```fallback
+$ helm show values bitnami/wordpress
+## Global Docker image parameters
+## Please, note that this will override the image parameters, including dependencies, configured to use the global value
+## Current available global Docker image parameters: imageRegistry and imagePullSecrets
+##
+# global:
+#   imageRegistry: myRegistryName
+#   imagePullSecrets:
+#     - myRegistryKeySecretName
+#   storageClass: myStorageClass
+
+## Bitnami WordPress image version
+## ref: https://hub.docker.com/r/bitnami/wordpress/tags/
+##
+image:
+  registry: docker.io
+  repository: bitnami/wordpress
+  tag: 5.6.0-debian-10-r35
+  [..]
+```
+
+然后，你可以使用 YAML 格式的文件覆盖上述任意配置项，并在安装过程中使用该文件。
+
+```fallback
+$ echo '{mariadb.auth.database: user0db, mariadb.auth.username: user0}' > values.yaml
+$ helm install -f values.yaml bitnami/wordpress --generate-name
+```
+
+上述命令将为 MariaDB 创建一个名称为 `user0` 的默认用户，并且授予该用户访问新建的 `user0db` 数据库的权限。chart 中的其他默认配置保持不变。
+
+安装过程中有两种方式传递配置数据：
+
+- `--values` (或 `-f`)：使用 YAML 文件覆盖配置。可以指定多次，优先使用最右边的文件。
+- `--set`：通过命令行的方式对指定项进行覆盖。
+
+如果同时使用两种方式，则 `--set` 中的值会被合并到 `--values` 中，但是 `--set` 中的值优先级更高。在`--set` 中覆盖的内容会被被保存在 ConfigMap 中。可以通过 `helm get values <release-name>` 来查看指定 release 中 `--set` 设置的值。也可以通过运行 `helm upgrade` 并指定 `--reset-values` 字段来清除 `--set` 中设置的值。
+
+#### `--set` 的格式和限制
+
+`--set` 选项使用0或多个 name/value 对。最简单的用法类似于：`--set name=value`，等价于如下 YAML 格式：
+
+```yaml
+name: value
+```
+
+多个值使用逗号分割，因此 `--set a=b,c=d` 的 YAML 表示是：
+
+```yaml
+a: b
+c: d
+```
+
+支持更复杂的表达式。例如，`--set outer.inner=value` 被转换成了：
+
+```yaml
+outer:
+  inner: value
+```
+
+列表使用花括号（`{}`）来表示。例如，`--set name={a, b, c}` 被转换成了：
+
+```yaml
+name:
+  - a
+  - b
+  - c
+```
+
+从 2.5.0 版本开始，可以使用数组下标的语法来访问列表中的元素。例如 `--set servers[0].port=80` 就变成了：
+
+```yaml
+servers:
+  - port: 80
+```
+
+多个值也可以通过这种方式来设置。`--set servers[0].port=80,servers[0].host=example` 变成了：
+
+```yaml
+servers:
+  - port: 80
+    host: example
+```
+
+如果需要在 `--set` 中使用特殊字符，你可以使用反斜线来进行转义；`--set name=value1\,value2` 就变成了：
+
+```yaml
+name: "value1,value2"
+```
+
+类似的，你也可以转义点序列（英文句号）。这可能会在 chart 使用 `toYaml` 函数来解析 annotations，labels，和 node selectors 时派上用场。`--set nodeSelector."kubernetes\.io/role"=master` 语法就变成了：
+
+```yaml
+nodeSelector:
+  kubernetes.io/role: master
+```
+
+深层嵌套的数据结构可能会很难用 `--set` 表达。我们希望 Chart 的设计者们在设计 `values.yaml` 文件的格式时，考虑到 `--set` 的使用。（更多内容请查看 [Values 文件](https://helm.sh/docs/chart_template_guide/values_files/)）
+
+### 更多安装方法
+
+`helm install` 命令可以从多个来源进行安装：
+
+- chart 的仓库（如上所述）
+- 本地 chart 压缩包（`helm install foo foo-0.1.1.tgz`）
+- 解压后的 chart 目录（`helm install foo path/to/foo`）
+- 完整的 URL（`helm install foo https://example.com/charts/foo-1.2.3.tgz`）
+
+## 'helm upgrade' 和 'helm rollback'：升级 release 和失败时恢复
+
+当你想升级到 chart 的新版本，或是修改 release 的配置，你可以使用 `helm upgrade` 命令。
+
+一次升级操作会使用已有的 release 并根据你提供的信息对其进行升级。由于 Kubernetes 的 chart 可能会很大而且很复杂，Helm 会尝试执行最小侵入式升级。即它只会更新自上次发布以来发生了更改的内容。
+
+```fallback
+$ helm upgrade -f panda.yaml happy-panda bitnami/wordpress
+```
+
+在上面的例子中，`happy-panda` 这个 release 使用相同的 chart 进行升级，但是使用了一个新的 YAML 文件：
+
+```yaml
+mariadb.auth.username: user1
+```
+
+我们可以使用 `helm get values` 命令来看看配置值是否真的生效了：
+
+```fallback
+$ helm get values happy-panda
+mariadb:
+  auth:
+    username: user1
+```
+
+`helm get` 是一个查看集群中 release 的有用工具。正如我们上面所看到的，`panda.yaml` 中的新值已经被部署到集群中了。
+
+现在，假如在一次发布过程中，发生了不符合预期的事情，也很容易通过 `helm rollback [RELEASE] [REVISION]` 命令回滚到之前的发布版本。
+
+```fallback
+$ helm rollback happy-panda 1
+```
+
+上面这条命令将我们的 `happy-panda` 回滚到了它最初的版本。release 版本其实是一个增量修订（revision）。 每当发生了一次安装、升级或回滚操作，revision 的值就会加1。第一次 revision 的值永远是1。我们可以使用 `helm history [RELEASE]` 命令来查看一个特定 release 的修订版本号。
+
+## 安装、升级、回滚时的有用选项
+
+你还可以指定一些其他有用的选项来自定义 Helm 在安装、升级、回滚期间的行为。请注意这并不是 cli 参数的完整列表。 要查看所有参数的说明，请执行 `helm <command> --help` 命令。
+
+- `--timeout`：一个 [Go duration](https://golang.org/pkg/time/#ParseDuration) 类型的值， 用来表示等待 Kubernetes 命令完成的超时时间，默认值为 `5m0s`。
+- `--wait`：表示必须要等到所有的 Pods 都处于 ready 状态，PVC 都被绑定，Deployments 都至少拥有最小 ready 状态 Pods 个数（`Desired`减去 `maxUnavailable`），并且 Services 都具有 IP 地址（如果是`LoadBalancer`， 则为 Ingress），才会标记该 release 为成功。最长等待时间由 `--timeout` 值指定。如果达到超时时间，release 将被标记为 `FAILED`。注意：当 Deployment 的 `replicas` 被设置为1，但其滚动升级策略中的 `maxUnavailable` 没有被设置为0时，`--wait` 将返回就绪，因为已经满足了最小 ready Pod 数。
+- `--no-hooks`：不运行当前命令的钩子。
+- `--recreate-pods`（仅适用于 `upgrade` 和 `rollback`）：这个参数会导致重建所有的 Pod（deployment中的Pod 除外）。（在 Helm 3 中已被废弃）
+
+## 'helm uninstall'：卸载 release
+
+使用 `helm uninstall` 命令从集群中卸载一个 release：
+
+```fallback
+$ helm uninstall happy-panda
+```
+
+该命令将从集群中移除指定 release。你可以通过 `helm list` 命令看到当前部署的所有 release：
+
+```fallback
+$ helm list
+NAME            VERSION UPDATED                         STATUS          CHART
+inky-cat        1       Wed Sep 28 12:59:46 2016        DEPLOYED        alpine-0.1.0
+```
+
+从上面的输出中，我们可以看到，`happy-panda` 这个 release 已经被卸载。
+
+在上一个 Helm 版本中，当一个 release 被删除，会保留一条删除记录。而在 Helm 3 中，删除也会移除 release 的记录。 如果你想保留删除记录，使用 `helm uninstall --keep-history`。使用 `helm list --uninstalled` 只会展示使用了 `--keep-history` 删除的 release。
+
+`helm list --all` 会展示 Helm 保留的所有 release 记录，包括失败或删除的条目（指定了 `--keep-history`）：
+
+```fallback
+$  helm list --all
+NAME            VERSION UPDATED                         STATUS          CHART
+happy-panda     2       Wed Sep 28 12:47:54 2016        UNINSTALLED     wordpress-10.4.5.6.0
+inky-cat        1       Wed Sep 28 12:59:46 2016        DEPLOYED        alpine-0.1.0
+kindred-angelf  2       Tue Sep 27 16:16:10 2016        UNINSTALLED     alpine-0.1.0
+```
+
+注意，因为现在默认会删除 release，所以你不再能够回滚一个已经被卸载的资源了。
+
+## 'helm repo'：使用仓库
+
+Helm 3 不再附带一个默认的 chart 仓库。`helm repo` 提供了一组命令用于添加、列出和移除仓库。
+
+使用 `helm repo list` 来查看配置的仓库：
+
+```fallback
+$ helm repo list
+NAME            URL
+stable          https://charts.helm.sh/stable
+mumoshu         https://mumoshu.github.io/charts
+```
+
+使用 `helm repo add` 来添加新的仓库：
+
+```fallback
+$ helm repo add dev https://example.com/dev-charts
+```
+
+因为 chart 仓库经常在变化，在任何时候你都可以通过执行 `helm repo update` 命令来确保你的 Helm 客户端是最新的。
+
+使用 `helm repo remove` 命令来移除仓库。
+
+## 创建你自己的 charts
+
+[chart 开发指南](https://helm.sh/zh/docs/topics/charts) 介绍了如何开发你自己的chart。 但是你也可以通过使用 `helm create` 命令来快速开始：
+
+```fallback
+$ helm create deis-workflow
+Creating deis-workflow
+```
+
+现在，`./deis-workflow` 目录下已经有一个 chart 了。你可以编辑它并创建你自己的模版。
+
+在编辑 chart 时，可以通过 `helm lint` 验证格式是否正确。
+
+当准备将 chart 打包分发时，你可以运行 `helm package` 命令：
+
+```go
+$ helm package deis-workflow
+deis-workflow-0.1.0.tgz
+```
+
+然后这个 chart 就可以很轻松的通过 `helm install` 命令安装：
+
+```fallback
+$ helm install deis-workflow ./deis-workflow-0.1.0.tgz
+...
+```
+
+打包好的 chart 可以上传到 chart 仓库中。查看 [Helm chart 仓库](https://helm.sh/zh/docs/topics/chart_repository)获取更多信息。
+
+# chart开发提示和技巧
+
+本指南涵盖了Helm chart的开发人员在构建生产环境质量的chart时学到的一些提示和技巧。
+
+## 了解你的模板功能
+
+Helm使用了 [Go模板](https://godoc.org/text/template)将你的自由文件构建成模板。 Go塑造了一些内置方法，我们增加了一些其他的。
+
+首先，我们添加了 [Sprig库](https://masterminds.github.io/sprig/)中所有的方法，出于安全原因，“env”和“expandenv”除外。
+
+我们也添加了两个特殊的模板方法：`include`和`required`。`include`方法允许你引入另一个模板，并将结果传递给其他模板方法。
+
+比如，这个模板片段包含了一个叫`mytpl`的模板，然后将其转成小写，并使用双引号括起来。
+
+```yaml
+value: {{ include "mytpl" . | lower | quote }}
+```
+
+`required`方法可以让你声明模板渲染所需的特定值。如果这个值是空的，模板渲染会出错并打印用户提交的错误信息。
+
+下面这个`required`方法的例子声明了一个`.Values.who`需要的条目，并且当这个条目不存在时会打印错误信息：
+
+```yaml
+value: {{ required "A valid .Values.who entry required!" .Values.who }}
+```
+
+## 字符串引号括起来，但整型不用
+
+使用字符串数据时，你总是更安全地将字符串括起来而不是露在外面：
+
+```yaml
+name: {{ .Values.MyName | quote }}
+```
+
+但是使用整型时 *不要把值括起来*。在很多场景中那样会导致Kubernetes内解析失败。
+
+```yaml
+port: {{ .Values.Port }}
+```
+
+这个说明不适用于环境变量是字符串的情况，即使表现为整型：
+
+```yaml
+env:
+  - name: HOST
+    value: "http://host"
+  - name: PORT
+    value: "1234"
+```
+
+## 使用'include'方法
+
+Go提供了一种使用内置模板将一个模板包含在另一个模板中的方法。然而内置方法并不用用于Go模板流水线。
+
+为使包含模板成为可能，然后对该模板的输出执行操作，Helm有一个特殊的`include`方法：
+
+```yaml
+{{ include "toYaml" $value | indent 2 }}
+```
+
+上面这个包含的模板称为`toYaml`，传值给`$value`，然后将这个模板的输出传给`indent`方法。
+
+由于YAML将重要性归因于缩进级别和空白，使其在包含代码片段时变成了一种好方法。但是在相关的上下文中要处理缩进。
+
+## 使用 'required' 方法
+
+Go提供了一种设置模板选项的方法去控制不在映射中的key来索引映射的行为。通常设置为`template.Options("missingkey=option")`， `option`是`default`，`zero`，或 `error`。 将此项设置为error时会停止执行并出现错误，这会应用到map中的每一个缺失的key中。 某些情况下chart的开发人员希望在`values.yaml`中选择值强制执行此操作。
+
+`required`方法允许开发者声明一个模板渲染需要的值。如果在`values.yaml`中这个值是空的，模板就不会渲染并返回开发者提供的错误信息。
+
+例如：
+
+```yaml
+{{ required "A valid foo is required!" .Values.foo }}
+```
+
+上述示例表示当`.Values.foo`被定义时模板会被渲染，但是未定义时渲染会失败并退出。
+
+## 使用'tpl'方法
+
+```
+tpl`方法允许开发者在模板中使用字符串作为模板。将模板字符串作为值传给chart或渲染额外的配置文件时会很有用。 语法： `{{ tpl TEMPLATE_STRING VALUES }}
+```
+
+示例：
+
+```yaml
+# values
+template: "{{ .Values.name }}"
+name: "Tom"
+
+# template
+{{ tpl .Values.template . }}
+
+# output
+Tom
+```
+
+渲染额外的配置文件：
+
+```yaml
+# external configuration file conf/app.conf
+firstName={{ .Values.firstName }}
+lastName={{ .Values.lastName }}
+
+# values
+firstName: Peter
+lastName: Parker
+
+# template
+{{ tpl (.Files.Get "conf/app.conf") . }}
+
+# output
+firstName=Peter
+lastName=Parker
+```
+
+## 创建镜像拉取密钥
+
+镜像拉取密钥本质上是 *注册表*， *用户名* 和 *密码* 的组合。在正在部署的应用程序中你可能需要它， 但创建时需要用`base64`跑一会儿。我们可以写一个辅助模板来编写Docker的配置文件，用来承载密钥。示例如下：
+
+首先，假定`values.yaml`文件中定义了证书如下：
+
+```yaml
+imageCredentials:
+  registry: quay.io
+  username: someone
+  password: sillyness
+  email: someone@host.com
+```
+
+然后定义下面的辅助模板：
+
+```yaml
+{{- define "imagePullSecret" }}
+{{- with .Values.imageCredentials }}
+{{- printf "{\"auths\":{\"%s\":{\"username\":\"%s\",\"password\":\"%s\",\"email\":\"%s\",\"auth\":\"%s\"}}}" .registry .username .password .email (printf "%s:%s" .username .password | b64enc) | b64enc }}
+{{- end }}
+{{- end }}
+```
+
+最终，我们使用辅助模板在更大的模板中创建了密钥清单：
+
+```yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: myregistrykey
+type: kubernetes.io/dockerconfigjson
+data:
+  .dockerconfigjson: {{ template "imagePullSecret" . }}
+```
+
+## 自动滚动部署
+
+由于配置映射或密钥作为配置文件注入容器以及其他外部依赖更新导致经常需要滚动部署pod。 随后的`helm upgrade`更新基于这个应用可能需要重新启动，但如果负载本身没有更改并使用原有配置保持运行，会导致部署不一致。
+
+`sha256sum`方法保证在另一个文件发生更改时更新负载说明：
+
+```yaml
+kind: Deployment
+spec:
+  template:
+    metadata:
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+[...]
+```
+
+注意：如果要将这些添加到库chart中，就无法使用`$.Template.BasePath`访问你的文件。相反你可以使用 `{{ include ("mylibchart.configmap") . | sha256sum }}` 引用你的定义。
+
+这个场景下你通常想滚动更新你的负载，可以使用类似的说明步骤，而不是使用随机字符串替换，因而经常更改并导致负载滚动更新：
+
+```yaml
+kind: Deployment
+spec:
+  template:
+    metadata:
+      annotations:
+        rollme: {{ randAlphaNum 5 | quote }}
+[...]
+```
+
+每次调用模板方法会生成一个唯一的随机字符串。这意味着如果需要同步多种资源使用的随机字符串，所有的相对资源都要在同一个模板文件中。
+
+这两种方法都允许你的部署利用内置的更新策略逻辑来避免停机。
+
+注意：过去我们推荐使用`--recreate-pods`参数作为另一个选项。这个参数在Helm 3中不推荐使用，而支持上面更具声明性的方法。
+
+## 告诉Helm不要卸载资源
+
+有时在执行`helm uninstall`时有些资源不应该被卸载。Chart的开发者可以在资源中添加额外的说明避免被卸载。
+
+```yaml
+kind: Secret
+metadata:
+  annotations:
+    "helm.sh/resource-policy": keep
+[...]
+```
+
+（需要引号）
+
+这个说明`"helm.sh/resource-policy": keep`指示Helm操作(比如`helm uninstall`，`helm upgrade` 或`helm rollback`)要删除时跳过删除这个资源，*然而*，这个资源会变成孤立的。Helm不再以任何方式管理它。 如果在已经卸载的但保留资源的版本上使用`helm install --replace`会出问题。
+
+## 使用"Partials"和模板引用
+
+有时你想在chart中创建可以重复利用的部分，不管是块还是局部模板。通常将这些文件保存在自己的文件中会更干净。
+
+在`templates/`目录中，任何以下划线(`_`)开始的文件不希望输出到Kubernetes清单文件中。因此按照惯例，辅助模板和局部模板会被放在`_helpers.tpl`文件中。
+
+## 使用很多依赖的复杂Chart
+
+在CNCF的 [Artifact Hub](https://artifacthub.io/packages/search?kind=0)中的很多chart是创建更先进应用的“组成部分”。但是chart可能被用于创建大规模应用实例。 在这种场景中，一个总的chart会有很多子chart，每一个是整体功能的一部分。
+
+当前从离散组件组成一个复杂应用的最佳实践是创建一个顶层总体chart构建全局配置，然后使用`charts/`子目录嵌入每个组件。
+
+## YAML是JSON的超集
+
+根据YAML规范，YAML是JSON的超集。这意味着任意的合法JSON结构在YAML中应该是合法的。
+
+这有个优势：有时候模板开发者会发现使用类JSON语法更容易表达数据结构而不是处理YAML的空白敏感度。
+
+作为最佳实践，模板应遵循类YAML语法 *除非* JSON语法大大降低了格式问题的风险。
+
+## 生成随机值时留神
+
+Helm中有的方法允许你生成随机数据，加密密钥等等。这些很好用，但是在升级，模板重新执行时要注意， 当模板运行与最后一次运行不一样的生成数据时，会触发资源升级。
+
+## 一条命令安装或升级版本
+
+Helm提供了一种简单命令执行安装或升级的方法。使用`helm upgrade`和`--install`命令，这会是Helm查看是否已经安装版本， 如果没有，会执行安装；如果版本存在，会进行升级
+
+```fallback
+$ helm upgrade --install <release name> --values <values file> <chart directory>
+```
+
+# 同步你的Chart仓库
+
+*注意： 该示例是专门针对Google Cloud Storage (GCS)提供的chart仓库。*
+
+## 先决条件
+
+- 安装 [gsutil](https://cloud.google.com/storage/docs/gsutil)工具。 *我们非常依赖gsutil rsync功能*
+- 确保可以使用Helm程序
+- *可选：我们推荐在你的GCS中设置 [对象版本](https://cloud.google.com/storage/docs/gsutil/addlhelp/ObjectVersioningandConcurrencyControl#top_of_page)以防不小心删除了什么。*
+
+## 设置本地chart仓库目录
+
+就像我们在 [chart仓库指南](https://helm.sh/zh/docs/topics/chart_repository)做的，创建一个本地目录，并将打包好的chart放在该目录中。
+
+例如：
+
+```fallback
+$ mkdir fantastic-charts
+$ mv alpine-0.1.0.tgz fantastic-charts/
+```
+
+## 生成新的index.yaml
+
+使用Helm生成新的index.yaml文件，通过将目录路径和远程仓库url传递给`helm repo index`命令：
+
+```fallback
+$ helm repo index fantastic-charts/ --url https://fantastic-charts.storage.googleapis.com
+```
+
+这会生成新的index.yaml文件并放在`fantastic-charts/`目录。
+
+## 同步本地和远程仓库
+
+使用`scripts/sync-repo.sh`命令上传GCS目录中的内容并传入本地目录名和GCS名。
+
+例如:
+
+```fallback
+$ pwd
+/Users/me/code/go/src/helm.sh/helm
+$ scripts/sync-repo.sh fantastic-charts/ fantastic-charts
+Getting ready to sync your local directory (fantastic-charts/) to a remote repository at gs://fantastic-charts
+Verifying Prerequisites....
+Thumbs up! Looks like you have gsutil. Let's continue.
+Building synchronization state...
+Starting synchronization
+Would copy file://fantastic-charts/alpine-0.1.0.tgz to gs://fantastic-charts/alpine-0.1.0.tgz
+Would copy file://fantastic-charts/index.yaml to gs://fantastic-charts/index.yaml
+Are you sure you would like to continue with these changes?? [y/N]} y
+Building synchronization state...
+Starting synchronization
+Copying file://fantastic-charts/alpine-0.1.0.tgz [Content-Type=application/x-tar]...
+Uploading   gs://fantastic-charts/alpine-0.1.0.tgz:              740 B/740 B
+Copying file://fantastic-charts/index.yaml [Content-Type=application/octet-stream]...
+Uploading   gs://fantastic-charts/index.yaml:                    347 B/347 B
+Congratulations your remote chart repository now matches the contents of fantastic-charts/
+```
+
+## 更新你的chart仓库
+
+您需要保留chart仓库内容的本地副本或使用`gsutil rsync`拷贝远程chart仓库内容到本地目录。
+
+例如：
+
+```fallback
+$ gsutil rsync -d -n gs://bucket-name local-dir/    # the -n flag does a dry run
+Building synchronization state...
+Starting synchronization
+Would copy gs://bucket-name/alpine-0.1.0.tgz to file://local-dir/alpine-0.1.0.tgz
+Would copy gs://bucket-name/index.yaml to file://local-dir/index.yaml
+
+$ gsutil rsync -d gs://bucket-name local-dir/       # performs the copy actions
+Building synchronization state...
+Starting synchronization
+Copying gs://bucket-name/alpine-0.1.0.tgz...
+Downloading file://local-dir/alpine-0.1.0.tgz:                        740 B/740 B
+Copying gs://bucket-name/index.yaml...
+Downloading file://local-dir/index.yaml:                              346 B/346 B
+```
+
+帮助链接：
+
+- [gsutil rsync文档](https://cloud.google.com/storage/docs/gsutil/commands/rsync#description)
+- [Chart仓库指南](https://helm.sh/zh/docs/topics/chart_repository)
+- Google Cloud Storage的 [对象版本控制和并发控制](https://cloud.google.com/storage/docs/gsutil/addlhelp/ObjectVersioningandConcurrencyControl#overview)
+
+# Chart发布操作用以自动化GitHub的页面Chart
+
+该指南描述了如何使用 [Chart发布操作](https://github.com/marketplace/actions/helm-chart-releaser) 通过GitHub页面自动发布chart。Chart发布操作是一个将GitHub项目转换成自托管Helm chart仓库的GitHub操作流。使用了 [helm/chart-releaser](https://github.com/helm/chart-releaser) CLI 工具。
+
+## 仓库变化
+
+在你的GitHub组织下创建一个Git仓库。可以将其命名为`helm-charts`，当然其他名称也可以接受。所有chart的资源都可以放在主分支。 chart应该放在根目录下的`/charts`目录中。
+
+还应该有另一个分支 `gh-pages` 用于发布chart。这个分支的更改会通过Chart发布操作自动创建。同时可以创建一个 `gh-branch`分支并添加`README.md`文件，其对访问该页面的用户是可见的。
+
+你可以在`README.md`中为chart的安装添加说明，像这样： （替换 `<alias>`， `<orgname>` 和 `<chart-name>`）:
+
+```text
+## Usage
+
+[Helm](https://helm.sh) must be installed to use the charts.  Please refer to
+Helm's [documentation](https://helm.sh/docs) to get started.
+
+Once Helm has been set up correctly, add the repo as follows:
+
+  helm repo add <alias> https://<orgname>.github.io/helm-charts
+
+If you had already added this repo earlier, run `helm repo update` to retrieve
+the latest versions of the packages.  You can then run `helm search repo
+<alias>` to see the charts.
+
+To install the <chart-name> chart:
+
+    helm install my-<chart-name> <alias>/<chart-name>
+
+To uninstall the chart:
+
+    helm delete my-<chart-name>
+```
+
+发布后的chart的url类似这样：
+
+```
+https://<orgname>.github.io/helm-charts
+```
+
+## GitHub 操作流
+
+在主分支创建一个GitHub操作流文件 `.github/workflows/release.yml`
+
+```text
+name: Release Charts
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+        with:
+          fetch-depth: 0
+
+      - name: Configure Git
+        run: |
+          git config user.name "$GITHUB_ACTOR"
+          git config user.email "$GITHUB_ACTOR@users.noreply.github.com"
+
+      - name: Run chart-releaser
+        uses: helm/chart-releaser-action@v1.1.0
+        env:
+          CR_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
+```
+
+上述配置使用了 [@helm/chart-releaser-action](https://github.com/helm/chart-releaser-action) 将GitHub项目转换成自托管的Helm chart仓库。在每次想主分支推送后会通过检查项目中的每个chart来执行次操作， 且每当有新的chart版本时，会创建一个与chart版本对应的GitHub版本，添加Helm chart组件到这个版本中， 并用该版本的元数据创建或更新一个`index.yaml`文件，然后托管在GitHub页面上。
+
+上述Chart发布操作示例使用的版本号是`v1.1.0`。你可以将其改成 [最新可用版本](https://github.com/helm/chart-releaser-action/releases)。
+
+注意：Chart发布操作程序几乎总是和 [Helm测试操作Action](https://github.com/marketplace/actions/helm-chart-testing) 以及 [Kind操作](https://github.com/marketplace/actions/kind-cluster)。

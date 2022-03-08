@@ -1,6 +1,6 @@
 apiVersion: storage.k8s.io/v1
 kind: StorageClass
 metadata:
-  name: do-block-storage
-provisioner: nfs-pv-log 
+  name: nfs-storage
+provisioner: justbeta.money/nfs
 

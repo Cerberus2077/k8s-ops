@@ -2,11 +2,12 @@ kind: Deployment
 apiVersion: apps/v1
 metadata:
   name: nfs-provisioner
+  namespace: default
 spec:
   selector:
     matchLabels:
        app: nfs-provisioner
-  replicas: 4
+  replicas: 1
   strategy:
     type: Recreate
   template:
@@ -24,13 +25,13 @@ spec:
               mountPath: /persistentvolumes
           env:
             - name: PROVISIONER_NAME
-              value: example.com/nfs
+              value: justbeta.money/nfs
             - name: NFS_SERVER
-              value: 192.168.187.145
+              value: 192.168.0.110
             - name: NFS_PATH
               value: /opt/nfs 
       volumes:
         - name: nfs-client-root
           nfs:
-            server: 192.168.187.145
+            server: 192.168.0.110
             path: /opt/nfs
