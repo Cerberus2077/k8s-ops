@@ -13,8 +13,8 @@
 | 内网ip             | 版本               | 角色   | 公网ip            |
 | ------------------ | ------------------ | ------ | ----------------- |
 | 192.168.187.145/16 | ubuntu 20.04.3 LTS | master | 122.114.50.242/24 |
-| 192.168.0.110/16   | ubuntu 20.04.3 LTS | Node1  | 122.114.0.110/24  |
-| 192.168.247.34/16  | ubuntu 20.04.3 LTS | Node2  | 116.255.247.34/25 |
+| 192.168.0.110/16   | ubuntu 20.04.3 LTS | Node1  | node1/24          |
+| 192.168.247.34/16  | ubuntu 20.04.3 LTS | Node2  | node2/25          |
 
 开放端口
 
@@ -46,13 +46,22 @@ etcd Node Inbound
  TCP      | 2379-2380  | Worker Nodes  | etcd server client API (only required if using flannel or Calico).                 \| 
 
 
-## 免认证登陆
+## 本地主机名解析
 
 ```bash
-
-ssh-copy-id -p 22000 root@116.255.187.145 #master
-ssh-copy-id -p 22000 root@122.114.0.110   #node1
-ssh-copy-id -p 22000 root@116.255.247.34  #node2
+# 初始化本地主机解析
+cat > /etc/hosts << EOF
+127.0.0.1   localhost localhost.localdomain localhost4 localhost4.localdomain4
+::1         localhost localhost.localdomain localhost6 localhost6.localdomain6
+192.168.187.145    master
+192.168.0.110      node1
+192.168.247.34     node2
+EOF
+	
+	
+ssh-copy-id -p 22000 root@master #master
+ssh-copy-id -p 22000 root@node1  #node1
+ssh-copy-id -p 22000 root@node2  #node2
 ```
 
 防火墙规则
@@ -94,16 +103,7 @@ ssh-copy-id -p 22000 root@116.255.247.34  #node2
 	sed -i '7s/gpgcheck=1/gpgcheck=0/g' /etc/yum.repos.d/epel.repo
 	yum clean all >/dev/null 2>&1
 	
-	
-	
-cat > /etc/hosts << EOF
-127.0.0.1   localhost localhost.localdomain localhost4 localhost4.localdomain4
-::1         localhost localhost.localdomain localhost6 localhost6.localdomain6
-192.168.187.145    master
-192.168.0.110      node1
-192.168.247.34     node2
-EOF
-	
+
 cat > /etc/security/limits.conf <<EOF
 * soft noproc 65536
 * hard noproc 65536
@@ -162,11 +162,11 @@ sed -i "s/HISTSIZE=1000/HISTSIZE=999999999/" /etc/profile
 
 #安装常用组件
 
-yum groupinstall Development tools -y >/dev/null 2>&1
+yum groupinstall Development tools -y 
 yum install -y vim wget  traceroute iotop iftop tree  ipvsadm conntrack \
- yum-utils ipset jq sysstat curl iptables  >/dev/null 2>&1
-yum install -y ncftp axel  zlib-devel openssl-devel unzip  libxslt-devel \
-libxml2-devel libcurl-devel chrony >/dev/null 2>&1
+ yum-utils ipset jq sysstat curl iptables  \
+ ncftp axel  zlib-devel openssl-devel unzip  libxslt-devel \
+libxml2-devel libcurl-devel chrony 
 	
 # 启动相关模块
 cat <<EOF | sudo tee /etc/modules-load.d/k8s.conf
@@ -188,7 +188,7 @@ modprobe -- nf_conntrack_ipv4
 EOF
 chmod 755 /etc/sysconfig/modules/ipvs.modules && bash /etc/sysconfig/modules/ipvs.modules \
 && lsmod | grep -e ip_vs -e nf_conntrack_ipv4
-
+# 开启内核转发
 cat <<EOF | sudo tee /etc/sysctl.d/k8s.conf
 net.bridge.bridge-nf-call-iptables  = 1
 net.ipv4.ip_forward                 = 1
@@ -198,14 +198,17 @@ sudo sysctl --system
 # 时间同步
 systemctl enable chronyd
 systemctl start chronyd
-chronyc sources
+
+
+[root@master ~]# chronyc sources
 210 Number of sources = 4
 MS Name/IP address         Stratum Poll Reach LastRx Last sample
 ===============================================================================
-^- 119.28.183.184                2   6    33     2  -2167us[-2167us] +/-   33ms
-^+ 202.118.1.130                 1   6    17     4   +872us[+5219us] +/-   20ms
-^* 119.28.206.193                2   6    17     2    +30us[+4377us] +/-   33ms
-^- time.cloudflare.com           3   6    17     3  -2176us[+2171us] +/-  114ms
+^- time.cloudflare.com           3   6    17     3    -30ms[  -30ms] +/-  133ms
+^- pingless.com                  2   6    17     3    +14ms[  +14ms] +/-  165ms
+^* 061239100101.ctinets.com      1   6    17     5   -549us[-1850ms] +/-   24ms
+^? 120.25.115.20                 2   6    30     9  -4217us[-1854ms] +/-   19ms
+
 
 
 # 更改源
@@ -250,9 +253,11 @@ name=Kubernetes
 baseurl=https://mirrors.aliyun.com/kubernetes/yum/repos/kubernetes-el7-x86_64/
 enabled=1
 gpgcheck=1
-repo_gpgcheck=1
+repo_gpgcheck=0
 gpgkey=https://mirrors.aliyun.com/kubernetes/yum/doc/yum-key.gpg https://mirrors.aliyun.com/kubernetes/yum/doc/rpm-package-key.gpg
 EOF
+rpm --import  https://mirrors.aliyun.com/kubernetes/yum/doc/yum-key.gpg
+rpm --import https://mirrors.aliyun.com/kubernetes/yum/doc/rpm-package-key.gpg 
 
 # 安装docker 源
 sudo yum-config-manager \
@@ -334,10 +339,7 @@ and check to make sure that only the key(s) you wanted were added.
 
 ```bash
 yum install -y device-mapper-persistent-data lvm2
-yum-config-manager --add-repo http://mirrors.aliyun.com/docker-ce/linux/centos/docker-ce.repo
-
-sudo yum install -y kubelet kubeadm kubectl --disableexcludes=kubernetes
-
+yum install -y kubelet kubeadm kubectl --disableexcludes=kubernetes
 systemctl  enable kubelet && systemctl start kubelet
 
 ```
@@ -382,14 +384,14 @@ systemctl  enable kubelet && systemctl start kubelet
   Login Succeeded
   
   #查询需要下载的镜像
-  [root@master ~]# kubeadm config images list
-  k8s.gcr.io/kube-apiserver:v1.22.4
-  k8s.gcr.io/kube-controller-manager:v1.22.4
-  k8s.gcr.io/kube-scheduler:v1.22.4
-  k8s.gcr.io/kube-proxy:v1.22.4
-  k8s.gcr.io/pause:3.5
-  k8s.gcr.io/etcd:3.5.0-0
-  k8s.gcr.io/coredns/coredns:v1.8.4
+  [root@master docker]# kubeadm config images list
+  k8s.gcr.io/kube-apiserver:v1.23.5
+  k8s.gcr.io/kube-controller-manager:v1.23.5
+  k8s.gcr.io/kube-scheduler:v1.23.5
+  k8s.gcr.io/kube-proxy:v1.23.5
+  k8s.gcr.io/pause:3.6
+  k8s.gcr.io/etcd:3.5.1-0
+  k8s.gcr.io/coredns/coredns:v1.8.6
   
   #生成默认配置文件
   kubeadm config print init-defaults > kubeadm.yaml
@@ -409,7 +411,7 @@ systemctl  enable kubelet && systemctl start kubelet
     - authentication
   kind: InitConfiguration
   localAPIEndpoint:
-    advertiseAddress: 122.114.50.242 # apiserver 节点内网IP
+    advertiseAddress:  192.168.187.145 # apiserver 节点内网IP
     bindPort: 6443
   nodeRegistration:
     criSocket: /var/run/dockershim.sock
@@ -431,10 +433,10 @@ systemctl  enable kubelet && systemctl start kubelet
       dataDir: /var/lib/etcd
   imageRepository: registry.cn-hangzhou.aliyuncs.com/google_containers
   kind: ClusterConfiguration
-  kubernetesVersion: v1.23.1  # k8s版本
+  kubernetesVersion: v1.23.5  # k8s版本
   networking:
     dnsDomain: cluster.local
-    podSubnet: 192.168.0.0/16
+    podSubnet: 192.2.0.0/16
     serviceSubnet: 10.96.0.0/12
   scheduler: {}
   ---
@@ -443,16 +445,24 @@ systemctl  enable kubelet && systemctl start kubelet
   mode: ipvs  # kube-proxy 模式
   EOF
   
-  
-  # 再次更新器镜像
-   kubeadm config images pull --config kubeadm.yaml
-  [config/images] Pulled registry.cn-hangzhou.aliyuncs.com/google_containers/kube-apiserver:v1.22.4
-  [config/images] Pulled registry.cn-hangzhou.aliyuncs.com/google_containers/kube-controller-manager:v1.22.4
-  [config/images] Pulled registry.cn-hangzhou.aliyuncs.com/google_containers/kube-scheduler:v1.22.4
-  [config/images] Pulled registry.cn-hangzhou.aliyuncs.com/google_containers/kube-proxy:v1.22.4
-  [config/images] Pulled registry.cn-hangzhou.aliyuncs.com/google_containers/pause:3.5
-  [config/images] Pulled registry.cn-hangzhou.aliyuncs.com/google_containers/etcd:3.5.0-0
-  [config/images] Pulled registry.cn-hangzhou.aliyuncs.com/google_containers/coredns:v1.8.4
+  #查看需要的镜像
+  kubeadm config images list  --config kubeadm.yaml
+  registry.cn-hangzhou.aliyuncs.com/google_containers/kube-apiserver:v1.23.5
+  registry.cn-hangzhou.aliyuncs.com/google_containers/kube-controller-manager:v1.23.5
+  registry.cn-hangzhou.aliyuncs.com/google_containers/kube-scheduler:v1.23.5
+  registry.cn-hangzhou.aliyuncs.com/google_containers/kube-proxy:v1.23.5
+  registry.cn-hangzhou.aliyuncs.com/google_containers/pause:3.6
+  registry.cn-hangzhou.aliyuncs.com/google_containers/etcd:3.5.1-0
+  registry.cn-hangzhou.aliyuncs.com/google_containers/coredns:v1.8.6
+  # 更新器镜像
+  kubeadm config images pull --config kubeadm.yaml
+  [config/images] Pulled registry.cn-hangzhou.aliyuncs.com/google_containers/kube-apiserver:v1.23.5
+  [config/images] Pulled registry.cn-hangzhou.aliyuncs.com/google_containers/kube-controller-manager:v1.23.5
+  [config/images] Pulled registry.cn-hangzhou.aliyuncs.com/google_containers/kube-scheduler:v1.23.5
+  [config/images] Pulled registry.cn-hangzhou.aliyuncs.com/google_containers/kube-proxy:v1.23.5
+  [config/images] Pulled registry.cn-hangzhou.aliyuncs.com/google_containers/pause:3.6
+  [config/images] Pulled registry.cn-hangzhou.aliyuncs.com/google_containers/etcd:3.5.1-0
+  [config/images] Pulled registry.cn-hangzhou.aliyuncs.com/google_containers/coredns:v1.8.6
   ```
   
   
@@ -462,8 +472,8 @@ systemctl  enable kubelet && systemctl start kubelet
 ## 使用配置文件初始化
 
 ```bash
-[root@master ~]# kubeadm  init --config kubeadm.yaml
-[init] Using Kubernetes version: v1.22.4
+kubeadm  init --config kubeadm.yaml
+[init] Using Kubernetes version: v1.23.5
 [preflight] Running pre-flight checks
 [preflight] Pulling images required for setting up a Kubernetes cluster
 [preflight] This might take a minute or two, depending on the speed of your internet connection
@@ -471,15 +481,15 @@ systemctl  enable kubelet && systemctl start kubelet
 [certs] Using certificateDir folder "/etc/kubernetes/pki"
 [certs] Generating "ca" certificate and key
 [certs] Generating "apiserver" certificate and key
-[certs] apiserver serving cert is signed for DNS names [kubernetes kubernetes.default kubernetes.default.svc kubernetes.default.svc.cluster.local master] and IPs [10.96.0.1 122.114.50.242]
+[certs] apiserver serving cert is signed for DNS names [kubernetes kubernetes.default kubernetes.default.svc kubernetes.default.svc.cluster.local master] and IPs [10.96.0.1 192.168.187.145]
 [certs] Generating "apiserver-kubelet-client" certificate and key
 [certs] Generating "front-proxy-ca" certificate and key
 [certs] Generating "front-proxy-client" certificate and key
 [certs] Generating "etcd/ca" certificate and key
 [certs] Generating "etcd/server" certificate and key
-[certs] etcd/server serving cert is signed for DNS names [localhost master] and IPs [122.114.50.242 127.0.0.1 ::1]
+[certs] etcd/server serving cert is signed for DNS names [localhost master] and IPs [192.168.187.145 127.0.0.1 ::1]
 [certs] Generating "etcd/peer" certificate and key
-[certs] etcd/peer serving cert is signed for DNS names [localhost master] and IPs [122.114.50.242 127.0.0.1 ::1]
+[certs] etcd/peer serving cert is signed for DNS names [localhost master] and IPs [192.168.187.145 127.0.0.1 ::1]
 [certs] Generating "etcd/healthcheck-client" certificate and key
 [certs] Generating "apiserver-etcd-client" certificate and key
 [certs] Generating "sa" key and public key
@@ -497,9 +507,10 @@ systemctl  enable kubelet && systemctl start kubelet
 [control-plane] Creating static Pod manifest for "kube-scheduler"
 [etcd] Creating static Pod manifest for local etcd in "/etc/kubernetes/manifests"
 [wait-control-plane] Waiting for the kubelet to boot up the control plane as static Pods from directory "/etc/kubernetes/manifests". This can take up to 4m0s
-[apiclient] All control plane components are healthy after 10.504175 seconds
+[apiclient] All control plane components are healthy after 13.504543 seconds
 [upload-config] Storing the configuration used in ConfigMap "kubeadm-config" in the "kube-system" Namespace
-[kubelet] Creating a ConfigMap "kubelet-config-1.22" in namespace kube-system with the configuration for the kubelets in the cluster
+[kubelet] Creating a ConfigMap "kubelet-config-1.23" in namespace kube-system with the configuration for the kubelets in the cluster
+NOTE: The "kubelet-config-1.23" naming of the kubelet ConfigMap is deprecated. Once the UnversionedKubeletConfigMap feature gate graduates to Beta the default name will become just "kubelet-config". Kubeadm upgrade will handle this transition transparently.
 [upload-certs] Skipping phase. Please see --upload-certs
 [mark-control-plane] Marking the node master as control-plane by adding the labels: [node-role.kubernetes.io/master(deprecated) node-role.kubernetes.io/control-plane node.kubernetes.io/exclude-from-external-load-balancers]
 [mark-control-plane] Marking the node master as control-plane by adding the taints [node-role.kubernetes.io/master:NoSchedule]
@@ -532,8 +543,8 @@ Run "kubectl apply -f [podnetwork].yaml" with one of the options listed at:
 
 Then you can join any number of worker nodes by running the following on each as root:
 
-kubeadm join 122.114.50.242:6443 --token abcdef.0123456789abcdef \
-	--discovery-token-ca-cert-hash sha256:95cd888563a4e6b20e729a0b705a1c9daee75c303866aa31e9bdfc55e10c80b7
+kubeadm join 192.168.187.145:6443 --token abcdef.0123456789abcdef \
+	--discovery-token-ca-cert-hash sha256:ba7ac7a0b1db834ebdfbc94e235404936cd4a449383d1913f8a161bdf023922c
 ```
 
 ## 拷贝kube配置到从节点
@@ -643,11 +654,11 @@ I1126 08:53:41.185669   28117 join.go:534] [preflight] Retrieving KubeConfig obj
 I1126 08:53:41.202519   28117 interface.go:431] Looking for default routes with IPv4 addresses
 I1126 08:53:41.202573   28117 interface.go:436] Default route transits interface "eth0"
 I1126 08:53:41.202776   28117 interface.go:208] Interface eth0 is up
-I1126 08:53:41.202847   28117 interface.go:256] Interface "eth0" has 1 addresses :[122.114.0.110/24].
-I1126 08:53:41.202888   28117 interface.go:223] Checking addr  122.114.0.110/24.
-I1126 08:53:41.202902   28117 interface.go:230] IP found 122.114.0.110
-I1126 08:53:41.202926   28117 interface.go:262] Found valid IPv4 address 122.114.0.110 for interface "eth0".
-I1126 08:53:41.202939   28117 interface.go:442] Found active IP 122.114.0.110
+I1126 08:53:41.202847   28117 interface.go:256] Interface "eth0" has 1 addresses :[node1/24].
+I1126 08:53:41.202888   28117 interface.go:223] Checking addr  node1/24.
+I1126 08:53:41.202902   28117 interface.go:230] IP found node1
+I1126 08:53:41.202926   28117 interface.go:262] Found valid IPv4 address node1 for interface "eth0".
+I1126 08:53:41.202939   28117 interface.go:442] Found active IP node1
 I1126 08:53:41.208031   28117 preflight.go:103] [preflight] Running configuration dependant checks
 I1126 08:53:41.208086   28117 controlplaneprepare.go:219] [download-certs] Skipping certs download
 I1126 08:53:41.208116   28117 kubelet.go:112] [kubelet-start] writing bootstrap kubelet config file at /etc/kubernetes/bootstrap-kubelet.conf
@@ -1507,7 +1518,7 @@ fi
        valid_lft forever preferred_lft forever
 2: eth0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc pfifo_fast state UP group default qlen 1000
     link/ether 52:54:00:e7:5a:3c brd ff:ff:ff:ff:ff:ff
-    inet 116.255.247.34/25 brd 116.255.247.127 scope global eth0
+    inet node2/25 brd 116.255.247.127 scope global eth0
        valid_lft forever preferred_lft forever
 3: eth1: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1450 qdisc pfifo_fast state UP group default qlen 1000
     link/ether 52:54:00:ec:02:ff brd ff:ff:ff:ff:ff:ff
@@ -1689,12 +1700,12 @@ kubeadm join 192.168.0.1:16443 --token eqlf70.9e3q0vbslezmur4m --discovery-token
 [preflight] You can also perform this action in beforehand using 'kubeadm config images pull'
 [certs] Using certificateDir folder "/etc/kubernetes/pki"
 [certs] Generating "apiserver" certificate and key
-[certs] apiserver serving cert is signed for DNS names [kubernetes kubernetes.default kubernetes.default.svc kubernetes.default.svc.cluster.local master2] and IPs [10.10.0.1 116.255.247.34 192.168.0.1 192.168.187.145 192.168.0.110 192.168.247.34 122.114.50.242]
+[certs] apiserver serving cert is signed for DNS names [kubernetes kubernetes.default kubernetes.default.svc kubernetes.default.svc.cluster.local master2] and IPs [10.10.0.1 node2 192.168.0.1 192.168.187.145 192.168.0.110 192.168.247.34 122.114.50.242]
 [certs] Generating "apiserver-kubelet-client" certificate and key
 [certs] Generating "etcd/server" certificate and key
-[certs] etcd/server serving cert is signed for DNS names [localhost master2] and IPs [116.255.247.34 127.0.0.1 ::1]
+[certs] etcd/server serving cert is signed for DNS names [localhost master2] and IPs [node2 127.0.0.1 ::1]
 [certs] Generating "etcd/peer" certificate and key
-[certs] etcd/peer serving cert is signed for DNS names [localhost master2] and IPs [116.255.247.34 127.0.0.1 ::1]
+[certs] etcd/peer serving cert is signed for DNS names [localhost master2] and IPs [node2 127.0.0.1 ::1]
 [certs] Generating "etcd/healthcheck-client" certificate and key
 [certs] Generating "apiserver-etcd-client" certificate and key
 [certs] Generating "front-proxy-client" certificate and key
