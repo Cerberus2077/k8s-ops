@@ -789,6 +789,17 @@ $ kubectl patch deployment valid-deployment  --type json   -p='[{"op": "remove",
 ```bash
 $ kubectl edit svc/docker-registry                      # 编辑名为 docker-registry 的 service
 $ KUBE_EDITOR="nano" kubectl edit svc/docker-registry   # 使用其它编辑器
+
+
+
+# 给节点打上标签
+$ kubectl  label node node1 node-role.kubernetes.io/worker=worker
+node/node1 labeled
+$ kubectl  get node
+NAME     STATUS   ROLES                  AGE   VERSION
+master   Ready    control-plane,master   8h    v1.22.4
+node1    Ready    worker                 8h    v1.22.4
+node2    Ready    worker                 8h    v1.22.4
 ```
 
 ## Scale 资源
