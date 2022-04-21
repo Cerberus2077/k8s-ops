@@ -471,7 +471,7 @@ systemctl  enable kubelet && systemctl start kubelet
   
   修改好的 [kubeadm.yaml](https://raw.githubusercontent.com/Cerberus2077/private-code/main/k8syaml/kubeadm.yaml?token=AAJPAAJVRFBW4GSCYPYBBN3BT6Q4W) 文件
 
-## 使用配置文件初始化
+## 使用kubeamdin创建的etcd
 
 ```bash
 kubeadm  init --config kubeadm.yaml
@@ -548,6 +548,145 @@ Then you can join any number of worker nodes by running the following on each as
 kubeadm join 192.168.187.145:6443 --token abcdef.0123456789abcdef \
 	--discovery-token-ca-cert-hash sha256:ba7ac7a0b1db834ebdfbc94e235404936cd4a449383d1913f8a161bdf023922c
 ```
+
+### 使用外部etcd集群
+
+```bash
+cat <<EOF | sudo tee  kubeadm.yaml
+apiVersion: kubeadm.k8s.io/v1beta2
+bootstrapTokens:
+- groups:
+  - system:bootstrappers:kubeadm:default-node-token
+  token: abcdef.0123456789abcdef
+  ttl: 24h0m0s
+  usages:
+  - signing
+  - authentication
+kind: InitConfiguration
+localAPIEndpoint:
+  advertiseAddress:  192.168.187.145 # apiserver 节点内网IP
+  bindPort: 6443
+nodeRegistration:
+  criSocket: /var/run/dockershim.sock
+  name: master
+  taints:
+  - effect: NoSchedule
+    key: node-role.kubernetes.io/master
+---
+apiServer:
+  timeoutForControlPlane: 4m0s
+apiVersion: kubeadm.k8s.io/v1beta2
+certificatesDir: /etc/kubernetes/pki
+clusterName: kubernetes
+controllerManager: {}
+dns:
+  type: CoreDNS  # dns类型
+etcd:
+  external:
+    endpoints:
+    - https://192.168.247.34:2379
+    - https://192.168.187.145:2379
+    - https://192.168.0.110:2379
+    caFile: /etc/etcd/ssl/ca.pem
+    certFile: /etc/etcd/ssl/etcd.pem
+    keyFile: /etc/etcd/ssl/etcd-key.pem
+imageRepository: registry.cn-hangzhou.aliyuncs.com/google_containers
+kind: ClusterConfiguration
+kubernetesVersion: v1.23.5  # k8s版本
+networking:
+  dnsDomain: cluster.local
+  podSubnet: 192.2.0.0/16
+  serviceSubnet: 10.96.0.0/12
+scheduler: {}
+---
+apiVersion: kubeproxy.config.k8s.io/v1alpha1
+kind: KubeProxyConfiguration
+mode: ipvs  # kube-proxy 模式
+EOF
+
+
+#查看需要的镜像
+kubeadm config images pull --config kubeadm.yaml
+[config/images] Pulled registry.cn-hangzhou.aliyuncs.com/google_containers/kube-apiserver:v1.23.5
+[config/images] Pulled registry.cn-hangzhou.aliyuncs.com/google_containers/kube-controller-manager:v1.23.5
+[config/images] Pulled registry.cn-hangzhou.aliyuncs.com/google_containers/kube-scheduler:v1.23.5
+[config/images] Pulled registry.cn-hangzhou.aliyuncs.com/google_containers/kube-proxy:v1.23.5
+[config/images] Pulled registry.cn-hangzhou.aliyuncs.com/google_containers/pause:3.6
+[config/images] Pulled registry.cn-hangzhou.aliyuncs.com/google_containers/coredns:v1.8.6
+#使用阿里云的镜像初始化集群
+#kubeadm  init --config kubeadm.yaml
+[init] Using Kubernetes version: v1.23.5
+[preflight] Running pre-flight checks
+[preflight] Pulling images required for setting up a Kubernetes cluster
+[preflight] This might take a minute or two, depending on the speed of your internet connection
+[preflight] You can also perform this action in beforehand using 'kubeadm config images pull'
+[certs] Using certificateDir folder "/etc/kubernetes/pki"
+[certs] Generating "ca" certificate and key
+[certs] Generating "apiserver" certificate and key
+[certs] apiserver serving cert is signed for DNS names [kubernetes kubernetes.default kubernetes.default.svc kubernetes.default.svc.cluster.local master] and IPs [10.96.0.1 192.168.187.145]
+[certs] Generating "apiserver-kubelet-client" certificate and key
+[certs] Generating "front-proxy-ca" certificate and key
+[certs] Generating "front-proxy-client" certificate and key
+[certs] External etcd mode: Skipping etcd/ca certificate authority generation
+[certs] External etcd mode: Skipping etcd/server certificate generation
+[certs] External etcd mode: Skipping etcd/peer certificate generation
+[certs] External etcd mode: Skipping etcd/healthcheck-client certificate generation
+[certs] External etcd mode: Skipping apiserver-etcd-client certificate generation
+[certs] Generating "sa" key and public key
+[kubeconfig] Using kubeconfig folder "/etc/kubernetes"
+[kubeconfig] Writing "admin.conf" kubeconfig file
+[kubeconfig] Writing "kubelet.conf" kubeconfig file
+[kubeconfig] Writing "controller-manager.conf" kubeconfig file
+[kubeconfig] Writing "scheduler.conf" kubeconfig file
+[kubelet-start] Writing kubelet environment file with flags to file "/var/lib/kubelet/kubeadm-flags.env"
+[kubelet-start] Writing kubelet configuration to file "/var/lib/kubelet/config.yaml"
+[kubelet-start] Starting the kubelet
+[control-plane] Using manifest folder "/etc/kubernetes/manifests"
+[control-plane] Creating static Pod manifest for "kube-apiserver"
+[control-plane] Creating static Pod manifest for "kube-controller-manager"
+[control-plane] Creating static Pod manifest for "kube-scheduler"
+[wait-control-plane] Waiting for the kubelet to boot up the control plane as static Pods from directory "/etc/kubernetes/manifests". This can take up to 4m0s
+[apiclient] All control plane components are healthy after 14.508963 seconds
+[upload-config] Storing the configuration used in ConfigMap "kubeadm-config" in the "kube-system" Namespace
+[kubelet] Creating a ConfigMap "kubelet-config-1.23" in namespace kube-system with the configuration for the kubelets in the cluster
+NOTE: The "kubelet-config-1.23" naming of the kubelet ConfigMap is deprecated. Once the UnversionedKubeletConfigMap feature gate graduates to Beta the default name will become just "kubelet-config". Kubeadm upgrade will handle this transition transparently.
+[upload-certs] Skipping phase. Please see --upload-certs
+[mark-control-plane] Marking the node master as control-plane by adding the labels: [node-role.kubernetes.io/master(deprecated) node-role.kubernetes.io/control-plane node.kubernetes.io/exclude-from-external-load-balancers]
+[mark-control-plane] Marking the node master as control-plane by adding the taints [node-role.kubernetes.io/master:NoSchedule]
+[bootstrap-token] Using token: abcdef.0123456789abcdef
+[bootstrap-token] Configuring bootstrap tokens, cluster-info ConfigMap, RBAC Roles
+[bootstrap-token] configured RBAC rules to allow Node Bootstrap tokens to get nodes
+[bootstrap-token] configured RBAC rules to allow Node Bootstrap tokens to post CSRs in order for nodes to get long term certificate credentials
+[bootstrap-token] configured RBAC rules to allow the csrapprover controller automatically approve CSRs from a Node Bootstrap Token
+[bootstrap-token] configured RBAC rules to allow certificate rotation for all node client certificates in the cluster
+[bootstrap-token] Creating the "cluster-info" ConfigMap in the "kube-public" namespace
+[kubelet-finalize] Updating "/etc/kubernetes/kubelet.conf" to point to a rotatable kubelet client certificate and key
+[addons] Applied essential addon: CoreDNS
+[addons] Applied essential addon: kube-proxy
+
+Your Kubernetes control-plane has initialized successfully!
+
+To start using your cluster, you need to run the following as a regular user:
+
+  mkdir -p $HOME/.kube
+  sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
+  sudo chown $(id -u):$(id -g) $HOME/.kube/config
+
+Alternatively, if you are the root user, you can run:
+
+  export KUBECONFIG=/etc/kubernetes/admin.conf
+
+You should now deploy a pod network to the cluster.
+Run "kubectl apply -f [podnetwork].yaml" with one of the options listed at:
+  https://kubernetes.io/docs/concepts/cluster-administration/addons/
+
+Then you can join any number of worker nodes by running the following on each as root:
+
+kubeadm join 192.168.187.145:6443 --token abcdef.0123456789abcdef \
+	--discovery-token-ca-cert-hash sha256:1ddfb8c2631459401f346c99d3b606385cc61b1ab713ce9748dffe86c032c814
+```
+
+
 
 ## 拷贝kube配置到从节点
 
@@ -2012,10 +2151,12 @@ cat > /etc/hosts << EOF
 192.168.247.34     node2
 EOF
 	
-	
+ ssh-keygen	
 ssh-copy-id -p 22000 root@master #master
 ssh-copy-id -p 22000 root@node1  #node1
 ssh-copy-id -p 22000 root@node2  #node2
+# 修改ssh 端口
+sed -i '41s/#   Port 22/Port 22000/g' /etc/ssh/ssh_config
 ```
 
 ## 环境初始化
@@ -2040,6 +2181,12 @@ EOF
 # 优化ssh
 
 [ -f /etc/ssh/sshd_config ]  && sed -ir '13 iUseDNS no\nGSSAPIAuthentication no' /etc/ssh/sshd_config && systemctl restart  sshd >/dev/null 2>&1
+cp /etc/ssh/sshd_config{,.bak}  
+#sed -e 's/\#PermitRootLogin yes/PermitRootLogin no/' -i /etc/ssh/sshd_config > /dev/null 2>&1
+sed -e 's/GSSAPIAuthentication yes/GSSAPIAuthentication no/' -i /etc/ssh/sshd_config > /dev/null 2>&1
+sed -e 's/#UseDNS yes/UseDNS no/' -i /etc/ssh/sshd_config > /dev/null 2>&1
+#sed -i '/^PasswordAuthentication/ s/yes/no/g' /etc/ssh/sshd_config
+/etc/init.d/sshd restart > /dev/null 2>&1
 
 
 
@@ -2077,13 +2224,29 @@ EOF
 sysctl -p >/dev/null 2>&1
 
 
+
+# 修改终端
+cat <<EOF >>/etc/profile
+alias vi='vim'
+export PS1='\n\e[1;37m[\e[m\e[1;32m\u\e[m\e[1;33m@\e[m\e[1;35m\h\e[m \e[4m\`pwd\`\e[m\e[1;37m]\e[m\e[1;36m\e[m\n\\\$' #换行
+export HISTTIMEFORMAT="%F %T \`whoami\`"
+EOF
+
 #增加历史记录
-if ! grep "HISTTIMEFORMAT" /etc/profile >/dev/null 2>&1
-then echo '
-UserIP=$(who -u am i | cut -d"("  -f 2 | sed -e "s/[()]//g")
-export HISTTIMEFORMAT="[%F %T] [`whoami`] [${UserIP}] " ' >> /etc/profile;
-fi
 sed -i "s/HISTSIZE=1000/HISTSIZE=999999999/" /etc/profile
+
+
+
+# vim 配置
+cat <<EOF>> /etc/vim.rc
+	set fo-=cro
+	set ts=4
+	set paste
+	filetype plugin indent on
+	set nu" >>/etc/vimrc
+EOF
+
+
 
 #安装常用组件
 
@@ -2125,15 +2288,7 @@ systemctl enable chronyd
 systemctl start chronyd
 
 
-[root@master ~]# chronyc sources
-210 Number of sources = 4
-MS Name/IP address         Stratum Poll Reach LastRx Last sample
-===============================================================================
-^- time.cloudflare.com           3   6    17     3    -30ms[  -30ms] +/-  133ms
-^- pingless.com                  2   6    17     3    +14ms[  +14ms] +/-  165ms
-^* 061239100101.ctinets.com      1   6    17     5   -549us[-1850ms] +/-   24ms
-^? 120.25.115.20                 2   6    30     9  -4217us[-1854ms] +/-   19ms
-
+chronyc sources
 
 
 # 更改源
@@ -2196,11 +2351,17 @@ tee /etc/docker/daemon.json  << 'EOF'
   "insecure-registries": ["harbor.justbeta.pro"]
 }
 EOF
-# 重新启动docker
-systemctl  daemon-reload
-systemctl  restart docker
-systemctl  status docker
+yum install -y docker-ce docker-ce-cli containerd.io
+sudo systemctl daemon-reload
+sudo systemctl enable docker.service
+sudo systemctl restart docker
+sudo systemctl status docker
 
+
+
+
+# 修改 主机名
+hostnamectl  set-hostname node1
 ```
 
 
@@ -2227,8 +2388,7 @@ tree bin
 ├── mkbundle
 ├── multirootca
 └── rice
-cd bin
-cp -rp cfssl cfssl-certinfo cfssljson /usr/local/bin/
+cd bin && cp -rp cfssl cfssl-certinfo cfssljson /usr/local/bin/
 ls -al /usr/local/bin/
 drwxr-xr-x.  2 root root     4096 4月   3 15:13 .
 drwxr-xr-x. 12 root root     4096 4月  11 2018 ..
@@ -2299,7 +2459,7 @@ cat << EOF |tee etcd-csr.json
   "CN": "etcd",
   "hosts": [
     "127.0.0.1",
-    "192.168.182.145",
+    "192.168.187.145",
     "192.168.0.110",
     "192.168.247.34",
     "122.114.50.242"
@@ -2330,18 +2490,20 @@ cfssl gencert -ca=ca.pem -ca-key=ca-key.pem -config=ca-config.json -profile=kube
 ```sh
 wget https://github.com/etcd-io/etcd/releases/download/v3.5.2/etcd-v3.5.2-linux-amd64.tar.gz
 tar xf etcd-v3.5.2-linux-amd64.tar.gz
-cp -ar etcd-v3.5.2-linux-amd64/etcd* /usr/local/bin/
-chmod +x /usr/local/bin/etcd*
+cp -ar etcd-v3.5.2-linux-amd64/etcd* /usr/local/bin/  && chmod +x /usr/local/bin/etcd*
+
 chown -R root.root /usr/local/bin/etcd*
 rsync -avzP -e "ssh -p 22000 " /usr/local/bin/etcd* node1:/usr/local/bin/
 rsync -avzP -e "ssh -p 22000 " /usr/local/bin/etcd* node2:/usr/local/bin/
 
 cat << EOF |tee etcd.conf
 #[Member]
-ETCD_NAME="etcd1"
+ETCD_NAME="etcd1" # 节点名称
 ETCD_DATA_DIR="/var/lib/etcd/default.etcd"
 ETCD_LISTEN_PEER_URLS="https://192.168.187.145:2380"
 ETCD_LISTEN_CLIENT_URLS="https://192.168.187.145:2379,http://127.0.0.1:2379"
+auto-compaction-retention=1 # 开启1小时自动压缩
+quota-backend-bytes=8589934592 # 大小8G
 #[Clustering]
 ETCD_INITIAL_ADVERTISE_PEER_URLS="https://192.168.187.145:2380"
 ETCD_ADVERTISE_CLIENT_URLS="https://192.168.187.145:2379"
@@ -2409,7 +2571,8 @@ cp etcd*.pem /etc/etcd/ssl/
 cp etcd.conf /etc/etcd/
 cp etcd.service /usr/lib/systemd/system/
 # 创建etcd 启动需要的目录
-mkdir  /var/lib/etcd/default.etcd
+mkdir -p mkdir  /var/lib/etcd/default.etcd
+chmod -R 700 /var/lib/etcd/default.etcd
 # 拷贝到远程主机
 for i in node1 node2 ; do rsync --delete -avzP -e "ssh -p 22000 " /etc/etcd/ssl/ $i:/etc/etcd/ssl/; done
 for i in node1 node2 ; do rsync -avzP -e "ssh -p 22000 " /usr/lib/systemd/system/etcd.service $i:/usr/lib/systemd/system/; done
@@ -2419,32 +2582,39 @@ for i in node1 node2 ; do rsync -avzP -e "ssh -p 22000 " /var/lib/etcd $i:/var/l
 登录node1,node2 修改配置文件
 
 ```shell
-[root@node1 etcd]# cat etcd.conf
+# node1
+cat  << "EOF"|tee /etc/etcd/etcd.conf
 #[Member]
 ETCD_NAME="etcd2"
 ETCD_DATA_DIR="/var/lib/etcd/default.etcd"
 ETCD_LISTEN_PEER_URLS="https://192.168.0.110:2380"
 ETCD_LISTEN_CLIENT_URLS="https://192.168.0.110:2379,http://127.0.0.1:2379"
+auto-compaction-retention=1  # 开启1小时自动压缩
+quota-backend-bytes=8589934592 # 大小8G
 #[Clustering]
 ETCD_INITIAL_ADVERTISE_PEER_URLS="https://192.168.0.110:2380"
 ETCD_ADVERTISE_CLIENT_URLS="https://192.168.0.110:2379"
 ETCD_INITIAL_CLUSTER="etcd1=https://192.168.187.145:2380,etcd2=https://192.168.0.110:2380,etcd3=https://192.168.247.34:2380"
 ETCD_INITIAL_CLUSTER_TOKEN="etcd-cluster"
-ETCD_INITIAL_CLUSTER_STATE="existing"
+ETCD_INITIAL_CLUSTER_STATE="new"
+EOF
 
-
-[root@node2 etcd]# cat /etc/etcd/etcd.conf
+# node2
+cat << "EOF"|tee /etc/etcd/etcd.conf
 #[Member]
 ETCD_NAME="etcd3"
 ETCD_DATA_DIR="/var/lib/etcd/default.etcd"
 ETCD_LISTEN_PEER_URLS="https://192.168.247.34:2380"
 ETCD_LISTEN_CLIENT_URLS="https://192.168.247.34:2379,http://127.0.0.1:2379"
+auto-compaction-retention=1  # 开启1小时自动压缩
+quota-backend-bytes=8589934592 # 大小8G
 #[Clustering]
 ETCD_INITIAL_ADVERTISE_PEER_URLS="https://192.168.247.34:2380"
 ETCD_ADVERTISE_CLIENT_URLS="https://192.168.247.34:2379"
 ETCD_INITIAL_CLUSTER="etcd1=https://192.168.187.145:2380,etcd2=https://192.168.0.110:2380,etcd3=https://192.168.247.34:2380"
 ETCD_INITIAL_CLUSTER_TOKEN="etcd-cluster"
-ETCD_INITIAL_CLUSTER_STATE="existing"
+ETCD_INITIAL_CLUSTER_STATE="new"
+EOF
 ```
 
 设置开启自启动(各节点均要设置)
@@ -2453,17 +2623,15 @@ ETCD_INITIAL_CLUSTER_STATE="existing"
 systemctl  daemon-reload
 systemctl enable etcd
 systemctl start etcd
-
 ```
 
 查看etcd的状态
 
 ```bash
- ETCDCTL_API=3
- etcdctl --write-out=table --cacert=/etc/etcd/ssl/ca.pem --cert=/etc/etcd/ssl/etcd.pem \
---key=/etc/etcd/ssl/etcd-key.pem \
---endpoints=https://192.168.247.34:2379,https://192.168.187.145:2379,https://192.168.0.110:2379\
- endpoint health
+echo "export ETCDCTL_API=3
+alias etcdctl='etcdctl --write-out=table --cacert=/etc/etcd/ssl/ca.pem --cert=/etc/etcd/ssl/etcd.pem --key=/etc/etcd/ssl/etcd-key.pem --endpoints=https://192.168.247.34:2379,https://192.168.187.145:2379,https://192.168.0.110:2379'
+" >> /etc/profile
+etcdctl  endpoint health
  +------------------------------+--------+-------------+-------+
 |           ENDPOINT           | HEALTH |    TOOK     | ERROR |
 +------------------------------+--------+-------------+-------+
@@ -2471,6 +2639,23 @@ systemctl start etcd
 |  https://192.168.247.34:2379 |   true | 33.369909ms |       |
 |   https://192.168.0.110:2379 |   true | 33.172653ms |       |
 +------------------------------+--------+-------------+-------+
+#查看etcd 大小
+etcdctl endpoint status --write-out table
++------------------------------+------------------+---------+---------+-----------+------------+-----------+------------+--------------------+--------+
+|           ENDPOINT           |        ID        | VERSION | DB SIZE | IS LEADER | IS LEARNER | RAFT TERM | RAFT INDEX | RAFT APPLIED INDEX | ERRORS |
++------------------------------+------------------+---------+---------+-----------+------------+-----------+------------+--------------------+--------+
+|  https://192.168.247.34:2379 | 659c0009b4674ca9 |   3.5.2 |   20 kB |     false |      false |         2 |         12 |                 12 |        |
+| https://192.168.187.145:2379 | 3c3f8df33bdeb6df |   3.5.2 |   20 kB |     false |      false |         2 |         12 |                 12 |        |
+|   https://192.168.0.110:2379 | ece3442ca246e5d5 |   3.5.2 |   20 kB |      true |      false |         2 |         12 |                 12 |        |
++------------------------------+------------------+---------+---------+-----------+------------+-----------+------------+--------------------+--------+
+etcdctl member list
++------------------+---------+-------+------------------------------+------------------------------+------------+
+|        ID        | STATUS  | NAME  |          PEER ADDRS          |         CLIENT ADDRS         | IS LEARNER |
++------------------+---------+-------+------------------------------+------------------------------+------------+
+| 3c3f8df33bdeb6df | started | etcd1 | https://192.168.187.145:2380 | https://192.168.187.145:2379 |      false |
+| 659c0009b4674ca9 | started | etcd3 |  https://192.168.247.34:2380 |  https://192.168.247.34:2379 |      false |
+| ece3442ca246e5d5 | started | etcd2 |   https://192.168.0.110:2380 |   https://192.168.0.110:2379 |      false |
++------------------+---------+-------+------------------------------+------------------------------+------------+
 ```
 
 ## 安装kubernetes组件
@@ -3012,13 +3197,6 @@ systemctl  start kube-scheduler
 systemctl  status kube-scheduler
 ```
 
-### 配置coredns
-
-```
- docker load -i ~/pause-cordns.tar.gz
- 
-```
-
 ### 部署kubelet组件
 
 ```bash
@@ -3038,7 +3216,7 @@ kubectl create clusterrolebinding  kubelet-bootstrap --clusterrole=system:node-b
 
 #### 创建配置文件服务化
 
-- node1配置
+node1配置
 
 ```bash
 cat << "EOF"|tee kubelet.json
@@ -3079,142 +3257,294 @@ cat << "EOF"|tee kubelet.json
 EOF
 ```
 
-- node2配置
+node2配置
 
-  ```bash
-  cat << "EOF"|tee kubelet.json
-  {
-    "kind": "KubeletConfiguration",
-    "apiVersion": "kubelet.config.k8s.io/v1beta1",
-    "authentication": {
-      "x509": {
-        "clientCAFile": "/etc/kubernetes/ssl/ca.pem"
-      },
-      "webhook": {
-        "enabled": true,
-        "cacheTTL": "2m0s"
-      },
-      "anonymous": {
-        "enabled": false
-      }
+```bash
+cat << "EOF"|tee kubelet.json
+{
+  "kind": "KubeletConfiguration",
+  "apiVersion": "kubelet.config.k8s.io/v1beta1",
+  "authentication": {
+    "x509": {
+      "clientCAFile": "/etc/kubernetes/ssl/ca.pem"
     },
-    "authorization": {
-      "mode": "Webhook",
-      "webhook": {
-        "cacheAuthorizedTTL": "5m0s",
-        "cacheUnauthorizedTTL": "30s"
-      }
+    "webhook": {
+      "enabled": true,
+      "cacheTTL": "2m0s"
     },
-    "address": "192.168.247.34",
-    "port": 10250,
-    "readOnlyPort": 10255,
-    "cgroupDriver": "systemd",
-    "hairpinMode": "promiscuous-bridge",
-    "serializeImagePulls": false,
-    "featureGates": {
-      "RotateKubeletServerCertificate": true
-    },
-    "clusterDomain": "cluster.local.",
-    "clusterDNS": ["10.255.0.2"]
-  }
-  EOF
-  ```
+    "anonymous": {
+      "enabled": false
+    }
+  },
+  "authorization": {
+    "mode": "Webhook",
+    "webhook": {
+      "cacheAuthorizedTTL": "5m0s",
+      "cacheUnauthorizedTTL": "30s"
+    }
+  },
+  "address": "192.168.247.34",
+  "port": 10250,
+  "readOnlyPort": 10255,
+  "cgroupDriver": "systemd",
+  "hairpinMode": "promiscuous-bridge",
+  "serializeImagePulls": false,
+  "featureGates": {
+    "RotateKubeletServerCertificate": true
+  },
+  "clusterDomain": "cluster.local.",
+  "clusterDNS": ["10.255.0.2"]
+}
+EOF
+```
 
-  #### 服务化
+#### 服务化
 
-  ```bash
-  cat << "EOF"|tee  kubelet.service
-  [Unit]
-  Description=Kubernetes Kubelet
-  Documentation=https://github.com/kubernetes/kubernetes
-  After=docker.service
-  Requires=docker.service
-  [Service]
-  WorkingDirectory=/var/lib/kubelet
-  ExecStart=/usr/local/bin/kubelet \
-    --bootstrap-kubeconfig=/etc/kubernetes/kubelet-bootstrap.kubeconfig \
-    --cert-dir=/etc/kubernetes/ssl \
-    --kubeconfig=/etc/kubernetes/kubelet.kubeconfig \
-    --config=/etc/kubernetes/kubelet.json \
-    --network-plugin=cni \
-    --pod-infra-container-image=k8s.gcr.io/pause:3.2 \
-    --alsologtostderr=true \
-    --logtostderr=false \
-    --log-dir=/var/log/kubernetes \
-    --v=2
-  Restart=on-failure
-  RestartSec=5
-  
-  [Install]
-  WantedBy=multi-user.target
-  EOF
-  ```
+```bash
+cat << "EOF"|tee  kubelet.service
+[Unit]
+Description=Kubernetes Kubelet
+Documentation=https://github.com/kubernetes/kubernetes
+After=docker.service
+Requires=docker.service
+[Service]
+WorkingDirectory=/var/lib/kubelet
+ExecStart=/usr/local/bin/kubelet \
+  --bootstrap-kubeconfig=/etc/kubernetes/kubelet-bootstrap.kubeconfig \
+  --cert-dir=/etc/kubernetes/ssl \
+  --kubeconfig=/etc/kubernetes/kubelet.kubeconfig \
+  --config=/etc/kubernetes/kubelet.json \
+  --network-plugin=cni \
+  --pod-infra-container-image=k8s.gcr.io/pause:3.2 \
+  --alsologtostderr=true \
+  --logtostderr=false \
+  --log-dir=/var/log/kubernetes \
+  --v=2
+Restart=on-failure
+RestartSec=5
 
-  #### 同步相关文件
+[Install]
+WantedBy=multi-user.target
+EOF
+```
 
-  ```bash
-  ssh node1 -C "mkdir -p /etc/kubernetes/ssl -p "
-  ssh node2 -C "mkdir -p /etc/kubernetes/ssl -p "
-  scp kubelet-bootstrap.kubeconfig  kubelet.json  node1:/etc/kubernetes/
-  scp ca.pem  node1:/etc/kubernetes/ssl/
-  scp kubelet.service  node1:/usr/lib/systemd/system/
-  scp kubelet-bootstrap.kubeconfig  kubelet.json  node2:/etc/kubernetes/
-  scp ca.pem  node2:/etc/kubernetes/ssl/
-  scp kubelet.service  node2:/usr/lib/systemd/system/
-  ssh node1 -C "mkdir -p /var/lib/kubelet"
-  ssh node1 -C "mkdir -p /var/log/kubernetes"
-  ssh node2 -C "mkdir -p /var/lib/kubelet"
-  ssh node2 -C "mkdir -p /var/log/kubernetes"
-  
-  ```
+#### 同步相关文件
 
-  #### 设置服务开机自启动
+```bash
+ssh node1 -C "mkdir -p /etc/kubernetes/ssl -p "
+ssh node2 -C "mkdir -p /etc/kubernetes/ssl -p "
+scp kubelet-bootstrap.kubeconfig  kubelet.json  node1:/etc/kubernetes/
+scp ca.pem  node1:/etc/kubernetes/ssl/
+scp kubelet.service  node1:/usr/lib/systemd/system/
+scp kubelet-bootstrap.kubeconfig  kubelet.json  node2:/etc/kubernetes/
+scp ca.pem  node2:/etc/kubernetes/ssl/
+scp kubelet.service  node2:/usr/lib/systemd/system/
+ssh node1 -C "mkdir -p /var/lib/kubelet"
+ssh node1 -C "mkdir -p /var/log/kubernetes"
+ssh node2 -C "mkdir -p /var/lib/kubelet"
+ssh node2 -C "mkdir -p /var/log/kubernetes"
 
-  ```bash
-   ssh node1 systemctl  daemon-reload
-   ssh node1 systemctl  enable kubelet
-   ssh node1 systemctl  start kubelet
-   ssh node1 systemctl  status kubelet
-   ssh node2 systemctl  daemon-reload
-   ssh node2 systemctl  enable kubelet
-   ssh node2 systemctl  start kubelet
-   ssh node2 systemctl  status kubelet
-   
-   
-   
-  ```
+```
 
-  #### 批准请求
+#### 设置服务开机自启动
 
-  ```shell
-  kubectl  get csr
-  ```
+```bash
+ ssh node1 systemctl  daemon-reload
+ ssh node1 systemctl  enable kubelet
+ ssh node1 systemctl  start kubelet
+ ssh node1 systemctl  status kubelet
+ ssh node2 systemctl  daemon-reload
+ ssh node2 systemctl  enable kubelet
+ ssh node2 systemctl  start kubelet
+ ssh node2 systemctl  status kubelet
+ 
+ 
+ 
+```
 
-  
+#### 批准请求
 
-  ```bash
-  NAME                                                   AGE     SIGNERNAME                                    REQUESTOR           REQUESTEDDURATION   CONDITION
-  node-csr-47FJ3OkKLhoGJREHouMHqbxbR3rLh8g0gt88nPzSSWI   3m13s   kubernetes.io/kube-apiserver-client-kubelet   kubelet-bootstrap   <none>              Pending
-  node-csr-xNHvyv4e-ZWLN1XMrnGCb6wzImhvvfAEFhsKCcft5CM   3m41s   kubernetes.io/kube-apiserver-client-kubelet   kubelet-bootstrap   <none>              Pending
-  ```
+```shell
+kubectl  get csr
+```
 
-  ```bash
-  kubectl  certificate  approve node-csr-47FJ3OkKLhoGJREHouMHqbxbR3rLh8g0gt88nPzSSWI
-  kubectl  certificate  approve node-csr-xNHvyv4e-ZWLN1XMrnGCb6wzImhvvfAEFhsKCcft5CM
-  ```
 
-  #### 查看节点状态
 
-  ```sh
-  k get nodes
-  NAME    STATUS     ROLES    AGE     VERSION
-  node1   NotReady   <none>   3m38s   v1.23.1
-  node2   NotReady   <none>   3m26s   v1.23.1
-  ```
+```bash
+NAME                                                   AGE     SIGNERNAME                                    REQUESTOR           REQUESTEDDURATION   CONDITION
+node-csr-47FJ3OkKLhoGJREHouMHqbxbR3rLh8g0gt88nPzSSWI   3m13s   kubernetes.io/kube-apiserver-client-kubelet   kubelet-bootstrap   <none>              Pending
+node-csr-xNHvyv4e-ZWLN1XMrnGCb6wzImhvvfAEFhsKCcft5CM   3m41s   kubernetes.io/kube-apiserver-client-kubelet   kubelet-bootstrap   <none>              Pending
+```
 
-  
+```bash
+kubectl  certificate  approve node-csr-47FJ3OkKLhoGJREHouMHqbxbR3rLh8g0gt88nPzSSWI
+kubectl  certificate  approve node-csr-xNHvyv4e-ZWLN1XMrnGCb6wzImhvvfAEFhsKCcft5CM
+```
 
-  # k8s集群常用命令
+#### 查看节点状态
+
+```sh
+k get nodes
+NAME    STATUS     ROLES    AGE     VERSION
+node1   NotReady   <none>   3m38s   v1.23.1
+node2   NotReady   <none>   3m26s   v1.23.1
+```
+
+### 部署kubeproxy
+
+创建配置文件服务化
+
+```bash
+# 创建csr请求
+cat << "EOF"|tee kube-proxy-csr.json
+{
+  "CN": "system:kube-proxy",
+  "key": {
+    "algo": "rsa",
+    "size": 2048
+  },
+  "names": [
+    {
+      "C": "CN",
+      "ST": "Hubei",
+      "L": "Wuhan",
+      "O": "k8s",
+      "OU": "system"
+    }
+  ]
+}
+EOF
+
+# 生成证书
+ cfssl gencert -ca=ca.pem -ca-key=ca-key.pem -config=ca-config.json -profile=kubernetes kube-proxy-csr.json |cfssljson -bare kube-proxy
+
+
+```
+
+#### 创建kubeconfig文件
+
+```bash
+# 创建apiserver 认证
+kubectl config set-cluster kubernetes --certificate-authority=ca.pem --embed-certs=true --server=https://122.114.50.242:6443 --kubeconfig=kube-proxy.kubeconfig
+# 创建客户端认证
+ kubectl config set-credentials kube-proxy --client-certificate=kube-proxy.pem  --client-key=kube-proxy-key.pem  --embed-certs=true --kubeconfig=kube-proxy.kubeconfig
+# 设置安全上下文
+ kubectl config set-context default --cluster=kubernetes --user=kube-proxy --kubeconfig=kube-proxy.kubeconfig
+# 设置当前上下文
+config  use-context default --kubeconfig=kube-proxy.kubeconfig
+```
+
+#### 创建kube-proxy的配置文件
+
+```bash
+#创建启动配置文件
+
+# node1 执行
+cat << "EOF"|tee /etc/kubernetes/kube-proxy.yaml
+apiVersion: kubeproxy.config.k8s.io/v1alpha1
+bindAddress: 192.168.0.110
+clientConnection:
+  kubeconfig: /etc/kubernetes/kube-proxy.kubeconfig
+clusterCIDR: 192.168.40.0/16
+healthzBindAddress: 192.168.0.110:10256
+kind: KubeProxyConfiguration
+metricsBindAddress: 192.168.0.110:10249
+mode: "ipvs"
+EOF
+
+# node2 执行
+cat << "EOF"|tee /etc/kubernetes/kube-proxy.yaml
+apiVersion: kubeproxy.config.k8s.io/v1alpha1
+bindAddress: 192.168.247.34
+clientConnection:
+  kubeconfig: /etc/kubernetes/kube-proxy.kubeconfig
+clusterCIDR: 192.168.40.0/16
+healthzBindAddress: 192.168.247.34:10256
+kind: KubeProxyConfiguration
+metricsBindAddress: 192.168.247.34:10249
+mode: "ipvs"
+EOF
+
+
+#创建服务化脚本
+
+
+cat << "EOF"|tee kube-proxy.service
+[Unit]
+Description=Kubernetes Kube-Proxy Server
+Documentation=https://github.com/kubernetes/kubernetes
+After=network.target
+
+[Service]
+WorkingDirectory=/var/lib/kube-proxy
+ExecStart=/usr/local/bin/kube-proxy \
+  --config=/etc/kubernetes/kube-proxy.yaml \
+  --alsologtostderr=true \
+  --logtostderr=false \
+  --log-dir=/var/log/kubernetes \
+  --v=2
+Restart=on-failure
+RestartSec=5
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target
+EOF
+```
+
+同步文件到相关节点
+
+```bash
+scp kube-proxy.kubeconfig  node1:/etc/kubernetes/
+scp kube-proxy.kubeconfig  node2:/etc/kubernetes/
+scp kube-proxy.service node1:/usr/lib/systemd/system/
+scp kube-proxy.service node2:/usr/lib/systemd/system/
+ssh node1 -C "mkdir -p /var/lib/kube-proxy"
+ssh node1 -C "systemctl daemon-reload"
+ssh node1 -C "systemctl enable kube-proxy"
+ssh node1 -C "systemctl start kube-proxy"
+
+ssh node2 -C "mkdir -p /var/lib/kube-proxy"
+ssh node2 -C "systemctl daemon-reload"
+ssh node2 -C "systemctl enable kube-proxy"
+ssh node2 -C "systemctl start kube-proxy"
+ssh node2 -C "systemctl status kube-proxy"
+```
+
+### 配置coredns
+
+```bash
+ # 各节点都要执行
+ docker load -i ~/pause-cordns.tar.gz
+ 
+```
+
+### 配置calico网络
+
+```bash
+wget https://docs.projectcalico.org/master/manifests/calico.yaml
+# 4160行添加
+           - name: DATASTORE_TYPE
+              value: kubernetes
+            - name: IP_AUTODETECTION_METHOD  # DaemonSet中添加该环境变量
+              value: interface=eth1    # 指定内网网卡
+            - name: WAIT_FOR_DATASTORE
+              value: "true"
+ k apply -f calico.yaml
+
+# 查看calico的状态
+
+```
+
+### 对系统用户进行授权
+
+```bash
+kubectl  create clusterrolebinding  kubernetes-kubectl --clusterrole=cluster-admin --user=kubernetes
+```
+
+
+
+# k8s集群常用命令
 
 ## 更改k8s有效期
 
