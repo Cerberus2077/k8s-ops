@@ -2,7 +2,7 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
   creationTimestamp: "2021-12-18T14:22:22Z"
-  name: jenkins-k8s-sa-cluster
+  name: cicd-sa-cluster
   resourceVersion: "1565332"
   uid: c345d22e-aba9-40f3-a1d7-9708e84d64f9
 roleRef:
@@ -11,5 +11,5 @@ roleRef:
   name: cluster-admin
 subjects:
 - kind: ServiceAccount
-  name: jenkins-k8s-sa
-  namespace: jenkins-k8s
+  name: cicd-sa
+  namespace: cicd

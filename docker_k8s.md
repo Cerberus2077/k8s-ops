@@ -340,7 +340,7 @@ and check to make sure that only the key(s) you wanted were added.
 
 
 ```bash
-yum install -y device-mapper-persistent-data lvm2
+yum install -y device-mapper-persistent-data lvm2 lrzsz tcping telnet curl
 yum install -y kubelet kubeadm kubectl --disableexcludes=kubernetes
 systemctl  enable kubelet && systemctl start kubelet
 
@@ -564,7 +564,7 @@ bootstrapTokens:
   - authentication
 kind: InitConfiguration
 localAPIEndpoint:
-  advertiseAddress:  192.168.187.145 # apiserver 节点内网IP
+  advertiseAddress: 122.114.50.242 # apiserver 节点内网IP
   bindPort: 6443
 nodeRegistration:
   criSocket: /var/run/dockershim.sock
@@ -592,7 +592,7 @@ etcd:
     keyFile: /etc/etcd/ssl/etcd-key.pem
 imageRepository: registry.cn-hangzhou.aliyuncs.com/google_containers
 kind: ClusterConfiguration
-kubernetesVersion: v1.23.5  # k8s版本
+kubernetesVersion: v1.23.6  # k8s版本
 networking:
   dnsDomain: cluster.local
   podSubnet: 192.2.0.0/16
@@ -2151,12 +2151,13 @@ cat > /etc/hosts << EOF
 192.168.247.34     node2
 EOF
 	
- ssh-keygen	
-ssh-copy-id -p 22000 root@master #master
-ssh-copy-id -p 22000 root@node1  #node1
-ssh-copy-id -p 22000 root@node2  #node2
-# 修改ssh 端口
+ssh-keygen	
+#修改 ssh 端口
 sed -i '41s/#   Port 22/Port 22000/g' /etc/ssh/ssh_config
+# 免密登录
+ ssh-copy-id -p 22000 root@master && ssh-copy-id -p 22000 root@node1 && ssh-copy-id -p 22000 root@node2
+
+
 ```
 
 ## 环境初始化
@@ -2182,10 +2183,9 @@ EOF
 
 [ -f /etc/ssh/sshd_config ]  && sed -ir '13 iUseDNS no\nGSSAPIAuthentication no' /etc/ssh/sshd_config && systemctl restart  sshd >/dev/null 2>&1
 cp /etc/ssh/sshd_config{,.bak}  
-#sed -e 's/\#PermitRootLogin yes/PermitRootLogin no/' -i /etc/ssh/sshd_config > /dev/null 2>&1
 sed -e 's/GSSAPIAuthentication yes/GSSAPIAuthentication no/' -i /etc/ssh/sshd_config > /dev/null 2>&1
 sed -e 's/#UseDNS yes/UseDNS no/' -i /etc/ssh/sshd_config > /dev/null 2>&1
-#sed -i '/^PasswordAuthentication/ s/yes/no/g' /etc/ssh/sshd_config
+sed -i '/^PasswordAuthentication/ s/yes/no/g' /etc/ssh/sshd_config
 /etc/init.d/sshd restart > /dev/null 2>&1
 
 
@@ -2221,7 +2221,7 @@ net.ipv4.ip_forward = 1
 net.ipv6.conf.all.disable_ipv6 =1
 net.ipv6.conf.default.disable_ipv6 =1
 EOF
-sysctl -p >/dev/null 2>&1
+sysctl -p 
 
 
 
@@ -2237,14 +2237,6 @@ sed -i "s/HISTSIZE=1000/HISTSIZE=999999999/" /etc/profile
 
 
 
-# vim 配置
-cat <<EOF>> /etc/vim.rc
-	set fo-=cro
-	set ts=4
-	set paste
-	filetype plugin indent on
-	set nu" >>/etc/vimrc
-EOF
 
 
 
@@ -2343,6 +2335,10 @@ rpm --import https://mirrors.aliyun.com/kubernetes/yum/doc/rpm-package-key.gpg
 sudo yum-config-manager \
     --add-repo \
     https://download.docker.com/linux/centos/docker-ce.repo
+    
+yum install -y docker-ce docker-ce-cli containerd.io
+
+ 
 # 修改docker 配置文件
 tee /etc/docker/daemon.json  << 'EOF'
 {
@@ -2351,11 +2347,10 @@ tee /etc/docker/daemon.json  << 'EOF'
   "insecure-registries": ["harbor.justbeta.pro"]
 }
 EOF
-yum install -y docker-ce docker-ce-cli containerd.io
 sudo systemctl daemon-reload
 sudo systemctl enable docker.service
 sudo systemctl restart docker
-sudo systemctl status docker
+sudo systemctl status docker   
 
 
 
@@ -2373,28 +2368,10 @@ hostnamectl  set-hostname node1
 mkdir -p /etc/etcd
 mkdir -p /etc/etcd/ssl
 # 安装证书签发工具
-mkdir -p /data/work 
-cd /data/work
+mkdir -p /data/work && cd /data/work
 git clone https://github.com/cloudflare/cfssl.git
 cd cfssl && make
-tree bin
-	bin
-├── cfssl
-├── cfssl-bundle
-├── cfssl-certinfo
-├── cfssljson
-├── cfssl-newkey
-├── cfssl-scan
-├── mkbundle
-├── multirootca
-└── rice
 cd bin && cp -rp cfssl cfssl-certinfo cfssljson /usr/local/bin/
-ls -al /usr/local/bin/
-drwxr-xr-x.  2 root root     4096 4月   3 15:13 .
-drwxr-xr-x. 12 root root     4096 4月  11 2018 ..
--rwxr-xr-x   1 root root 14121648 4月   3 15:08 cfssl
--rwxr-xr-x   1 root root 10997008 4月   3 15:08 cfssl-certinfo
--rwxr-xr-x   1 root root  7663616 4月   3 15:08 cfssljson
 ```
 
 [cfssl项目地址](https://github.com/cloudflare/cfssl)
@@ -2498,7 +2475,7 @@ rsync -avzP -e "ssh -p 22000 " /usr/local/bin/etcd* node2:/usr/local/bin/
 
 cat << EOF |tee etcd.conf
 #[Member]
-ETCD_NAME="etcd1" # 节点名称
+ETCD_NAME="etcd1" 
 ETCD_DATA_DIR="/var/lib/etcd/default.etcd"
 ETCD_LISTEN_PEER_URLS="https://192.168.187.145:2380"
 ETCD_LISTEN_CLIENT_URLS="https://192.168.187.145:2379,http://127.0.0.1:2379"
@@ -2566,6 +2543,7 @@ LimitNOFILE=65536
 WantedBy=multi-user.target
 EOF
 # 拷贝相关文件到对应位置
+mkdir -p /etc/etcd/ssl/
 cp ca*.pem /etc/etcd/ssl/
 cp etcd*.pem /etc/etcd/ssl/
 cp etcd.conf /etc/etcd/
@@ -2574,6 +2552,8 @@ cp etcd.service /usr/lib/systemd/system/
 mkdir -p mkdir  /var/lib/etcd/default.etcd
 chmod -R 700 /var/lib/etcd/default.etcd
 # 拷贝到远程主机
+ssh node1 -C "mkdir -p /etc/etcd/ssl/"
+ssh node2 -C "mkdir -p /etc/etcd/ssl/"
 for i in node1 node2 ; do rsync --delete -avzP -e "ssh -p 22000 " /etc/etcd/ssl/ $i:/etc/etcd/ssl/; done
 for i in node1 node2 ; do rsync -avzP -e "ssh -p 22000 " /usr/lib/systemd/system/etcd.service $i:/usr/lib/systemd/system/; done
 for i in node1 node2 ; do rsync -avzP -e "ssh -p 22000 " /var/lib/etcd $i:/var/lib/; done
@@ -2648,6 +2628,9 @@ etcdctl endpoint status --write-out table
 | https://192.168.187.145:2379 | 3c3f8df33bdeb6df |   3.5.2 |   20 kB |     false |      false |         2 |         12 |                 12 |        |
 |   https://192.168.0.110:2379 | ece3442ca246e5d5 |   3.5.2 |   20 kB |      true |      false |         2 |         12 |                 12 |        |
 +------------------------------+------------------+---------+---------+-----------+------------+-----------+------------+--------------------+--------+
+
+
+
 etcdctl member list
 +------------------+---------+-------+------------------------------+------------------------------+------------+
 |        ID        | STATUS  | NAME  |          PEER ADDRS          |         CLIENT ADDRS         | IS LEARNER |
@@ -3728,8 +3711,6 @@ sudo echo "<服务器外网IP>    kubernetes"    >> /etc/hosts
 
 ```bash
 $ kubectx
-arn:aws-cn:eks:cn-northwest-1:083057233987:cluster/anywhere-devrn:aws-cn:eks:cn-northwest-1:083057233987:cluster/shopforcelite-dev
-arn:aws-cn:eks:cn-northwest-1:851654390883:cluster/apple-pro
 k8s-westcn
 (base)
 # cerberus @ cerberusdeMacBook-Pro in ~/.kube [17:44:14]

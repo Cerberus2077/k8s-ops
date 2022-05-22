@@ -77,7 +77,7 @@ provisioner: jenkins-provisioner-nfs
 kind: PersistentVolumeClaim
 apiVersion: v1
 metadata:
-  name: jenkins-k8s-pvc
+  name: cicd-pvc
   namespace: devops
 spec:
   accessModes:  ["ReadWriteMany"]

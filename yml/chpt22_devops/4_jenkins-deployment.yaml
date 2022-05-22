@@ -2,7 +2,7 @@ kind: Deployment
 apiVersion: apps/v1
 metadata:
   name: jenkins
-  namespace: jenkins-k8s
+  namespace: cicd
 spec:
   replicas: 1
   selector:
@@ -13,7 +13,7 @@ spec:
       labels:
         app: jenkins
     spec:
-      serviceAccount: jenkins-k8s-sa
+      serviceAccount: cicd-sa
       containers:
       - name: jenkins
         image:  jenkinsci/blueocean:latest
@@ -53,5 +53,5 @@ spec:
       volumes:
       - name: jenkins-volume
         persistentVolumeClaim:
-          claimName: jenkins-k8s-pvc
+          claimName: cicd-pvc
 

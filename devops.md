@@ -11,12 +11,24 @@
 听我们课程的大部分同学应该都或多或少的听说过`Jenkins`，我们这里就不再去详细讲述什么是 Jenkins 了，直接进入正题，后面我们会单独的关于 Jenkins 的学习课程，想更加深入学习的同学也可以关注下。既然要基于`Kubernetes`来做`CI/CD`，当然我们这里需要将 Jenkins 安装到 Kubernetes 集群当中，新建一个 Deployment：(jenkins2.yaml)
 
 ```yaml
+apiVersion: v1
+kind: Namespace
+metadata:
+  creationTimestamp: "2022-05-22T13:04:13Z"
+  labels:
+    kubernetes.io/metadata.name: cicd
+  name: cicd
+  resourceVersion: "2877603"
+  uid: 2a2001a9-1f6d-4a7c-a10a-c10feb4562c2
+spec:
+  finalizers:
+  - kubernetes
 ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: jenkins2
-  namespace: kube-ops
+  namespace: cicd
 spec: 
   selector:
     matchLabels:
@@ -76,7 +88,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: jenkins2
-  namespace: kube-ops
+  namespace: cicd
   labels:
     app: jenkins2
 spec:
@@ -93,10 +105,10 @@ spec:
     targetPort: agent
 ```
 
-为了方便演示，我们把本节课所有的对象资源都放置在一个名为 kube-ops 的 namespace 下面，所以我们需要添加创建一个 namespace：
+为了方便演示，我们把本节课所有的对象资源都放置在一个名为 cicd 的 namespace 下面，所以我们需要添加创建一个 namespace：
 
 ```shell
-$ kubectl create namespace kube-ops
+$ kubectl create namespace cicd
 ```
 
 我们这里使用一个名为 jenkins/jenkins:lts 的镜像，这是 jenkins 官方的 Docker 镜像，然后也有一些环境变量，当然我们也可以根据自己的需求来定制一个镜像，比如我们可以将一些插件打包在自定义的镜像当中，可以参考文档：https://github.com/jenkinsci/docker，我们这里使用默认的官方镜像就行，另外一个还需要注意的是我们将容器的 /var/jenkins_home 目录挂载到了一个名为 opspvc 的 PVC 对象上面，所以我们同样还得提前创建一个对应的 PVC 对象，当然我们也可以使用我们前面的 StorageClass 对象来自动创建：(pvc.yaml)
@@ -121,7 +133,7 @@ kind: PersistentVolumeClaim
 apiVersion: v1
 metadata:
   name: opspvc
-  namespace: kube-ops
+  namespace: cicd
 spec:
   accessModes:
     - ReadWriteMany
@@ -143,7 +155,7 @@ apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: jenkins2
-  namespace: kube-ops
+  namespace: cicd
 
 ---
 
@@ -176,7 +188,7 @@ apiVersion: rbac.authorization.k8s.io/v1beta1
 kind: ClusterRoleBinding
 metadata:
   name: jenkins2
-  namespace: kube-ops
+  namespace: cicd
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
@@ -184,7 +196,7 @@ roleRef:
 subjects:
   - kind: ServiceAccount
     name: jenkins2
-    namespace: kube-ops
+    namespace: cicd
 ```
 
 创建 rbac 相关的资源对象：
@@ -209,7 +221,7 @@ service "jenkins2" created
 创建完成后，要去拉取镜像可能需要等待一会儿，然后我们查看下 Pod 的状态：
 
 ```shell
-$ kubectl get pods -n kube-ops
+$ kubectl get pods -n cicd
 NAME                        READY     STATUS    RESTARTS   AGE
 jenkins2-7f5494cd44-pqpzs   0/1       Running   0          2m
 ```
@@ -217,7 +229,7 @@ jenkins2-7f5494cd44-pqpzs   0/1       Running   0          2m
 可以看到该 Pod 处于 Running 状态，但是 READY 值确为0，然后我们用 describe 命令去查看下该 Pod 的详细信息：
 
 ```shell
-$ kubectl describe pod jenkins2-7f5494cd44-pqpzs -n kube-ops
+$ kubectl describe pod jenkins2-7f5494cd44-pqpzs -n cicd
 ...
 Normal   Created                3m                kubelet, node01    Created container
   Normal   Started                3m                kubelet, node01    Started container
@@ -228,7 +240,7 @@ Normal   Created                3m                kubelet, node01    Created con
 可以看到上面的 Warning 信息，健康检查没有通过，具体原因是什么引起的呢？可以通过查看日志进一步了解：
 
 ```shell
-$ kubectl logs -f jenkins2-7f5494cd44-pqpzs -n kube-ops
+$ kubectl logs -f jenkins2-7f5494cd44-pqpzs -n cicd
 touch: cannot touch '/var/jenkins_home/copy_reference_file.log': Permission denied
 Can not write to /var/jenkins_home/copy_reference_file.log. Wrong volume permissions?
 ```
@@ -255,7 +267,7 @@ service "jenkins2" created
 现在我们再去查看新生成的 Pod 已经没有错误信息了：
 
 ```shell
-$ kubectl get pods -n kube-ops
+$ kubectl get pods -n cicd
 NAME                        READY     STATUS        RESTARTS   AGE
 jenkins2-7f5494cd44-smn2r   1/1       Running       0          25s
 ```
@@ -299,15 +311,15 @@ Jenkins 安装完成了，接下来我们不用急着就去使用，我们要了
 
 接下来我们就需要来配置 Jenkins，让他能够动态的生成 Slave 的 Pod。
 
-第1步. 我们需要安装**kubernetes plugin**， 点击 Manage Jenkins -> Manage Plugins -> Available -> Kubernetes plugin 勾选安装即可。 ![kubernetes plugin](/Users/luca/Documents/文稿/k8s-ops/pic/setup-jenkins-k8s-plugin.png)
+第1步. 我们需要安装**kubernetes plugin**， 点击 Manage Jenkins -> Manage Plugins -> Available -> Kubernetes plugin 勾选安装即可。 ![kubernetes plugin](/Users/luca/Documents/文稿/k8s-ops/pic/setup-cicd-plugin.png)
 
-第2步. 安装完毕后，点击 Manage Jenkins —> Configure System —> (拖到最下方)Add a new cloud —> 选择 Kubernetes，然后填写 Kubernetes 和 Jenkins 配置信息。 ![kubernetes plugin config1](/Users/luca/Documents/文稿/k8s-ops/pic/jenkins-k8s-config1.png)
+第2步. 安装完毕后，点击 Manage Jenkins —> Configure System —> (拖到最下方)Add a new cloud —> 选择 Kubernetes，然后填写 Kubernetes 和 Jenkins 配置信息。 ![kubernetes plugin config1](/Users/luca/Documents/文稿/k8s-ops/pic/cicd-config1.png)
 
-注意 namespace，我们这里填 kube-ops，然后点击**Test Connection**，如果出现 Connection test successful 的提示信息证明 Jenkins 已经可以和 Kubernetes 系统正常通信了，然后下方的 Jenkins URL 地址：**[http://jenkins2.kube-ops.svc.cluster.local:8080](http://jenkins2.kube-ops.svc.cluster.local:8080/)**，这里的格式为：服务名.namespace.svc.cluster.local:8080，**根据上面创建的jenkins 的服务名填写，我这里是之前创建的名为jenkins，如果是用上面我们创建的就应该是jenkins2**
+注意 namespace，我们这里填 cicd，然后点击**Test Connection**，如果出现 Connection test successful 的提示信息证明 Jenkins 已经可以和 Kubernetes 系统正常通信了，然后下方的 Jenkins URL 地址：**[http://jenkins2.cicd.svc.cluster.local:8080](http://jenkins2.cicd.svc.cluster.local:8080/)**，这里的格式为：服务名.namespace.svc.cluster.local:8080，**根据上面创建的jenkins 的服务名填写，我这里是之前创建的名为jenkins，如果是用上面我们创建的就应该是jenkins2**
 
 > 另外需要注意，如果这里 Test Connection 失败的话，很有可能是权限问题，这里就需要把我们创建的 jenkins 的 serviceAccount 对应的 secret 添加到这里的 Credentials 里面。
 
-第3步. 配置 Pod Template，其实就是配置 Jenkins Slave 运行的 Pod 模板，命名空间我们同样是用 kube-ops，Labels 这里也非常重要，对于后面执行 Job 的时候需要用到该值，然后我们这里使用的是 cnych/jenkins:jnlp 这个镜像，这个镜像是在官方的 jnlp 镜像基础上定制的，加入了 kubectl 等一些实用的工具。 ![kubernetes plugin config2](/Users/luca/Documents/文稿/k8s-ops/pic/jenkins-k8s-config2.png)
+第3步. 配置 Pod Template，其实就是配置 Jenkins Slave 运行的 Pod 模板，命名空间我们同样是用 cicd，Labels 这里也非常重要，对于后面执行 Job 的时候需要用到该值，然后我们这里使用的是 cnych/jenkins:jnlp 这个镜像，这个镜像是在官方的 jnlp 镜像基础上定制的，加入了 kubectl 等一些实用的工具。 ![kubernetes plugin config2](/Users/luca/Documents/文稿/k8s-ops/pic/cicd-config2.png)
 
 > 注意：由于新版本的 Kubernetes 插件变化较多，如果你使用的 Jenkins 版本在 2.176.x 版本以上，注意将上面的镜像替换成`cnych/jenkins:jnlp6`，否则使用会报错，配置如下图所示：
 
@@ -315,9 +327,9 @@ Jenkins 安装完成了，接下来我们不用急着就去使用，我们要了
 
 另外需要注意我们这里需要在下面挂载两个主机目录，一个是`/var/run/docker.sock`，该文件是用于 Pod 中的容器能够共享宿主机的 Docker，这就是大家说的 docker in docker 的方式，Docker 二进制文件我们已经打包到上面的镜像中了，另外一个目录下`/root/.kube`目录，我们将这个目录挂载到容器的`/root/.kube`目录下面这是为了让我们能够在 Pod 的容器中能够使用 kubectl 工具来访问我们的 Kubernetes 集群，方便我们后面在 Slave Pod 部署 Kubernetes 应用。 ![kubernetes plugin config3](/Users/luca/Documents/文稿/k8s-ops/pic/jenkins-slave-volume.png)
 
-另外还有几个参数需要注意，如下图中的**Time in minutes to retain slave when idle**，这个参数表示的意思是当处于空闲状态的时候保留 Slave Pod 多长时间，这个参数最好我们保存默认就行了，如果你设置过大的话，Job 任务执行完成后，对应的 Slave Pod 就不会立即被销毁删除。 ![kubernetes plugin config4](/Users/luca/Documents/文稿/k8s-ops/pic/jenkins-k8s-config4.png)
+另外还有几个参数需要注意，如下图中的**Time in minutes to retain slave when idle**，这个参数表示的意思是当处于空闲状态的时候保留 Slave Pod 多长时间，这个参数最好我们保存默认就行了，如果你设置过大的话，Job 任务执行完成后，对应的 Slave Pod 就不会立即被销毁删除。 ![kubernetes plugin config4](/Users/luca/Documents/文稿/k8s-ops/pic/cicd-config4.png)
 
-另外一些同学在配置了后运行 Slave Pod 的时候出现了权限问题，因为 Jenkins Slave Pod 中没有配置权限，所以需要配置上 ServiceAccount，在 Slave Pod 配置的地方点击下面的高级，添加上对应的 ServiceAccount 即可： ![kubernetes plugin config5](/Users/luca/Documents/文稿/k8s-ops/pic/jenkins-k8s-config5.png)
+另外一些同学在配置了后运行 Slave Pod 的时候出现了权限问题，因为 Jenkins Slave Pod 中没有配置权限，所以需要配置上 ServiceAccount，在 Slave Pod 配置的地方点击下面的高级，添加上对应的 ServiceAccount 即可： ![kubernetes plugin config5](/Users/luca/Documents/文稿/k8s-ops/pic/cicd-config5.png)
 
 还有一些同学在配置完成后发现启动 Jenkins Slave Pod 的时候，出现 Slave Pod 连接不上，然后尝试100次连接之后销毁 Pod，然后会再创建一个 Slave Pod 继续尝试连接，无限循环，类似于下面的信息： ![img](/Users/luca/Documents/文稿/k8s-ops/pic/slave-pod-reconnect-100-times.png)
 
@@ -351,7 +363,7 @@ kubectl get pods
 现在我们直接在页面点击做成的 Build now 触发构建即可，然后观察 Kubernetes 集群中 Pod 的变化
 
 ```shell
-$ kubectl get pods -n kube-ops
+$ kubectl get pods -n cicd
 NAME                       READY     STATUS              RESTARTS   AGE
 jenkins2-7c85b6f4bd-rfqgv   1/1       Running             3          1d
 jnlp-hfmvd                 0/1       ContainerCreating   0          7s
@@ -361,10 +373,10 @@ jnlp-hfmvd                 0/1       ContainerCreating   0          7s
 
 同样也可以查看到对应的控制台信息： ![jnlp output](/Users/luca/Documents/文稿/k8s-ops/pic/jenkins-demo1-config5.png)
 
-到这里证明我们的任务已经构建完成，然后这个时候我们再去集群查看我们的 Pod 列表，发现 kube-ops 这个 namespace 下面已经没有之前的 Slave 这个 Pod 了。
+到这里证明我们的任务已经构建完成，然后这个时候我们再去集群查看我们的 Pod 列表，发现 cicd 这个 namespace 下面已经没有之前的 Slave 这个 Pod 了。
 
 ```shell
-$ kubectl get pods -n kube-ops
+$ kubectl get pods -n cicd
 NAME                       READY     STATUS    RESTARTS   AGE
 jenkins2-7c85b6f4bd-rfqgv   1/1       Running   3          1d
 ```
@@ -445,7 +457,7 @@ node('haimaxy-jnlp') {
 我们这里只是给 node 添加了一个 haimaxy-jnlp 这样的一个label，然后我们保存，构建之前查看下 kubernetes 集群中的 Pod：
 
 ```shell
-$ kubectl get pods -n kube-ops
+$ kubectl get pods -n cicd
 NAME                       READY     STATUS              RESTARTS   AGE
 jenkins-7c85b6f4bd-rfqgv   1/1       Running             4          6d
 ```
@@ -453,7 +465,7 @@ jenkins-7c85b6f4bd-rfqgv   1/1       Running             4          6d
 然后重新触发立刻构建：
 
 ```shell
-$ kubectl get pods -n kube-ops
+$ kubectl get pods -n cicd
 NAME                       READY     STATUS    RESTARTS   AGE
 jenkins-7c85b6f4bd-rfqgv   1/1       Running   4          6d
 jnlp-0hrrz                 1/1       Running   0          23s
@@ -462,7 +474,7 @@ jnlp-0hrrz                 1/1       Running   0          23s
 我们发现多了一个名叫**jnlp-0hrrz**的 Pod 正在运行，隔一会儿这个 Pod 就不再了：
 
 ```
-$ kubectl get pods -n kube-ops
+$ kubectl get pods -n cicd
 NAME                       READY     STATUS    RESTARTS   AGE
 jenkins-7c85b6f4bd-rfqgv   1/1       Running   4          6d
 ```
@@ -750,15 +762,15 @@ node('haimaxy-jnlp') {
 ![pipeline demo6](/Users/luca/Documents/文稿/k8s-ops/pic/pipeline-demo6.png) 打印出来了 QA，和我们刚刚的选择是一致的，现在我们去 Kubernetes 集群中观察下部署的应用：
 
 ```shell
-$ kubectl get deployment -n kube-ops
+$ kubectl get deployment -n cicd
 NAME           DESIRED   CURRENT   UP-TO-DATE   AVAILABLE   AGE
 jenkins        1         1         1            1           7d
 jenkins-demo   1         1         1            0           1m
-$ kubectl get pods -n kube-ops
+$ kubectl get pods -n cicd
 NAME                           READY     STATUS      RESTARTS   AGE
 jenkins-7c85b6f4bd-rfqgv       1/1       Running     4          7d
 jenkins-demo-f6f4f646b-2zdrq   0/1       Completed   4          1m
-$ kubectl logs jenkins-demo-f6f4f646b-2zdrq -n kube-ops
+$ kubectl logs jenkins-demo-f6f4f646b-2zdrq -n cicd
 Hello, Kubernetes！I'm from Jenkins CI！
 ```
 
@@ -1454,10 +1466,10 @@ storageclass.storage.k8s.io "harbor-data" created
 创建完成后，使用上面自定义的 values 文件安装：
 
 ```shell
-$ helm install --name harbor -f qikqiak-values.yaml . --namespace kube-ops
+$ helm install --name harbor -f qikqiak-values.yaml . --namespace cicd
 NAME:   harbor
 LAST DEPLOYED: Fri Feb 22 22:39:22 2019
-NAMESPACE: kube-ops
+NAMESPACE: cicd
 STATUS: DEPLOYED
 
 RESOURCES:
@@ -1546,7 +1558,7 @@ For more details, please visit https://github.com/goharbor/harbor.
 上面是我们通过 Helm 安装所有涉及到的一些资源对象，稍微等一会儿，就可以安装成功了，查看对应的 Pod 状态：
 
 ```shell
-$ kubectl get pods -n kube-ops
+$ kubectl get pods -n cicd
 NAME                                           READY     STATUS    RESTARTS   AGE
 harbor-harbor-adminserver-58c855568c-7dqqb     1/1       Running   0          37m
 harbor-harbor-chartmuseum-58d6c9b898-4csmd     1/1       Running   0          49m
@@ -1564,7 +1576,7 @@ harbor-harbor-registry-5569fcbf78-5grds        2/2       Running   0          49
 现在都是`Running`状态了，都成功运行起来了，查看下对应的 Ingress 对象：
 
 ```shell
-$ kubectl get ingress -n kube-ops
+$ kubectl get ingress -n cicd
 NAME                    HOSTS                                     ADDRESS   PORTS     AGE
 harbor-harbor-ingress   registry.qikqiak.com,notary.qikqiak.com             80, 443   50m
 ```
@@ -1604,7 +1616,7 @@ Get https://registry.qikqiak.com/v1/users/: x509: certificate has expired or is 
 这是因为我们没有提供证书文件，我们将使用到的`ca.crt`文件复制到`/etc/docker/certs.d/registry.qikqiak.com`目录下面，如果该目录不存在，则创建它。ca.crt 这个证书文件我们可以通过 Ingress 中使用的 Secret 资源对象来提供：
 
 ```shell
-$ kubectl get secret harbor-harbor-ingress -n kube-ops -o yaml
+$ kubectl get secret harbor-harbor-ingress -n cicd -o yaml
 apiVersion: v1
 data:
   ca.crt: <ca.crt>
@@ -1619,9 +1631,9 @@ metadata:
     heritage: Tiller
     release: harbor
   name: harbor-harbor-ingress
-  namespace: kube-ops
+  namespace: cicd
   resourceVersion: "50400208"
-  selfLink: /api/v1/namespaces/kube-ops/secrets/harbor-harbor-ingress
+  selfLink: /api/v1/namespaces/cicd/secrets/harbor-harbor-ingress
   uid: a899c57a-36af-11e9-bcd8-525400db4df7
 type: kubernetes.io/tls
 ```
@@ -1691,7 +1703,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: redis
-  namespace: kube-ops
+  namespace: cicd
   labels:
     name: redis
 spec:
@@ -1736,7 +1748,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: redis
-  namespace: kube-ops
+  namespace: cicd
   labels:
     name: redis
 spec:
@@ -1755,7 +1767,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: postgresql
-  namespace: kube-ops
+  namespace: cicd
   labels:
     name: postgresql
 spec:
@@ -1815,7 +1827,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: postgresql
-  namespace: kube-ops
+  namespace: cicd
   labels:
     name: postgresql
 spec:
@@ -1834,7 +1846,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: gitlab
-  namespace: kube-ops
+  namespace: cicd
   labels:
     name: gitlab
 spec:
@@ -1925,7 +1937,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: gitlab
-  namespace: kube-ops
+  namespace: cicd
   labels:
     name: gitlab
 spec:
@@ -1944,7 +1956,7 @@ apiVersion: extensions/v1beta1
 kind: Ingress
 metadata:
   name: gitlab
-  namespace: kube-ops
+  namespace: cicd
   annotations:
     kubernetes.io/ingress.class: traefik
 spec:
@@ -1968,7 +1980,7 @@ $ kubectl create -f gitlab-redis.yaml gitlab-postgresql.yaml gitlab.yaml
 创建完成后，查看 Pod 的部署状态：
 
 ```shell
-$ kubectl get pods -n kube-ops
+$ kubectl get pods -n cicd
 NAME                                           READY     STATUS    RESTARTS   AGE
 gitlab-7d855554cb-twh7c                        1/1       Running   0          10m
 postgresql-8566bb959c-2tnvr                    1/1       Running   0          17h
@@ -1998,7 +2010,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: gitlab
-  namespace: kube-ops
+  namespace: cicd
   labels:
     name: gitlab
 spec:
@@ -2147,7 +2159,7 @@ To further debug and diagnose cluster problems, use 'kubectl cluster-info dump'.
 
 3.编写 Gitlab CI Runner 资源清单文件
 
-同样我们将 Runner 相关的资源对象都安装到`kube-ops`这个 namespace 下面，首先，我们通过 ConfigMap 资源来传递 Runner 镜像所需的环境变量（runner-cm.yaml）:
+同样我们将 Runner 相关的资源对象都安装到`cicd`这个 namespace 下面，首先，我们通过 ConfigMap 资源来传递 Runner 镜像所需的环境变量（runner-cm.yaml）:
 
 ```yaml
 apiVersion: v1
@@ -2155,10 +2167,10 @@ data:
   REGISTER_NON_INTERACTIVE: "true"
   REGISTER_LOCKED: "false"
   METRICS_SERVER: "0.0.0.0:9100"
-  CI_SERVER_URL: "http://gitlab.kube-ops.svc.cluster.local/ci"
+  CI_SERVER_URL: "http://gitlab.cicd.svc.cluster.local/ci"
   RUNNER_REQUEST_CONCURRENCY: "4"
   RUNNER_EXECUTOR: "kubernetes"
-  KUBERNETES_NAMESPACE: "kube-ops"
+  KUBERNETES_NAMESPACE: "cicd"
   KUBERNETES_PRIVILEGED: "true"
   KUBERNETES_CPU_LIMIT: "1"
   KUBERNETES_CPU_REQUEST: "500m"
@@ -2176,10 +2188,10 @@ metadata:
   labels:
     app: gitlab-ci-runner
   name: gitlab-ci-runner-cm
-  namespace: kube-ops
+  namespace: cicd
 ```
 
-要注意`CI_SERVER_URL`对应的值需要指向我们的 Gitlab 实例的 URL（可以是外网地址，也可以是 Kubernetes 集群内部的 Service DNS 地址，因为 Runner 也是运行在 Kubernetes 集群中的），并加上`/ci`（ http://gitlab.kube-ops.svc.cluster.local/ci ）。此外还添加了一些构建容器运行的资源限制，我们可以自己根据需要进行更改即可。
+要注意`CI_SERVER_URL`对应的值需要指向我们的 Gitlab 实例的 URL（可以是外网地址，也可以是 Kubernetes 集群内部的 Service DNS 地址，因为 Runner 也是运行在 Kubernetes 集群中的），并加上`/ci`（ http://gitlab.cicd.svc.cluster.local/ci ）。此外还添加了一些构建容器运行的资源限制，我们可以自己根据需要进行更改即可。
 
 > 注意：在向 ConfigMap 添加新选项后，需要删除 GitLab CI Runner Pod。因为我们是使用 `envFrom`来注入上面的这些环境变量而不是直接使用`env`的（envFrom 通过将环境变量放置到`ConfigMaps`或`Secrets`来帮助减小清单文件。
 
@@ -2231,7 +2243,7 @@ metadata:
   labels:
     app: gitlab-ci-runner
   name: gitlab-ci-runner-scripts
-  namespace: kube-ops
+  namespace: cicd
 ```
 
 我们可以看到需要一个 GITLAB_CI_TOKEN，然后我们用 Gitlab CI runner token 来创建一个 Kubernetes secret 对象。将 token 进行 base64 编码：
@@ -2250,7 +2262,7 @@ apiVersion: v1
 kind: Secret
 metadata:
   name: gitlab-ci-token
-  namespace: kube-ops
+  namespace: cicd
   labels:
     app: gitlab-ci-runner
 data:
@@ -2266,7 +2278,7 @@ apiVersion: apps/v1
 kind: StatefulSet
 metadata:
   name: gitlab-ci-runner
-  namespace: kube-ops
+  namespace: cicd
   labels:
     app: gitlab-ci-runner
 spec:
@@ -2330,13 +2342,13 @@ apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: gitlab-ci
-  namespace: kube-ops
+  namespace: cicd
 ---
 kind: Role
 apiVersion: rbac.authorization.k8s.io/v1
 metadata:
   name: gitlab-ci
-  namespace: kube-ops
+  namespace: cicd
 rules:
   - apiGroups: [""]
     resources: ["*"]
@@ -2346,11 +2358,11 @@ kind: RoleBinding
 apiVersion: rbac.authorization.k8s.io/v1
 metadata:
   name: gitlab-ci
-  namespace: kube-ops
+  namespace: cicd
 subjects:
   - kind: ServiceAccount
     name: gitlab-ci
-    namespace: kube-ops
+    namespace: cicd
 roleRef:
   kind: Role
   name: gitlab-ci
@@ -2377,7 +2389,7 @@ statefulset.apps "gitlab-ci-runner" created
 创建完成后，可以通过查看 Pod 状态判断 Runner 是否运行成功：
 
 ```shell
-$ kubectl get pods -n kube-ops
+$ kubectl get pods -n cicd
 NAME                                           READY     STATUS    RESTARTS   AGE
 gitlab-7bff969fbc-k5zl4                        1/1       Running   0          4d
 gitlab-ci-runner-0                             1/1       Running   0          3m
@@ -2411,7 +2423,7 @@ $ git push -u origin master
 此时 Runner Pod 所在的 namespace 下面也会出现两个新的 Pod：
 
 ```shell
-$ kubectl get pods -n kube-ops
+$ kubectl get pods -n cicd
 NAME                                           READY     STATUS              RESTARTS   AGE
 gitlab-7bff969fbc-k5zl4                        1/1       Running             0          4d
 gitlab-ci-runner-0                             1/1       Running             0          4m
@@ -3177,7 +3189,7 @@ $ git push origin master
 然后切换到 Jenkins 页面上，正常情况就可以看到我们的流水线任务`polling-app-server`已经被触发构建了，然后回到我们的 Kubernetes 集群中可以看到多了一个 slave 开头的 Pod，里面有5个容器，就是我们上面 podTemplate 中定义的4个容器，加上一个默认的 jenkins slave 容器，同样的，构建任务完成后，这个 Pod 也会被自动销毁掉：
 
 ```shell
-$ kubectl get pods -n kube-ops
+$ kubectl get pods -n cicd
 NAME                                                      READY     STATUS    RESTARTS   AGE
 jenkins-7fbfcc5ddc-xsqmt                                  1/1       Running   0          1d
 slave-6e898009-62a2-4798-948f-9c80c3de419b-0jwml-6t6hb   5/5       Running   0          36s
