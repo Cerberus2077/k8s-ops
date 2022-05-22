@@ -17,7 +17,7 @@
 
 [pod自动扩展](./pod_autoscale.md)
 
-[devops/CICD](./devops.md)
+[devops/devops](./devops.md)
 
 [微服务部署](./ms.md)
 

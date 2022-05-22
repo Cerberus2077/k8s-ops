@@ -57,7 +57,7 @@ spec:
       volumes:
       - name: jenkins-volume
         persistentVolumeClaim:
-          claimName: cicd-pvc
+          claimName: devops-pvc
 ---
 apiVersion: v1
 kind: Service

@@ -1,8 +1,9 @@
+--- #定义一个使用sc的jenkins
 kind: Deployment
 apiVersion: apps/v1
 metadata:
   name: jenkins
-  namespace: cicd
+  namespace: devops
 spec:
   replicas: 1
   selector:
@@ -13,10 +14,10 @@ spec:
       labels:
         app: jenkins
     spec:
-      serviceAccount: cicd-sa
+      serviceAccount: jenkins-provisioner-nfs-sa
       containers:
       - name: jenkins
-        image:  jenkinsci/blueocean:latest
+        image: jenkinsci/blueocean:latest
         imagePullPolicy: IfNotPresent
         ports:
         - containerPort: 8080
@@ -46,6 +47,9 @@ spec:
           initialDelaySeconds: 60
           timeoutSeconds: 5
           failureThreshold: 12
+        env:
+         - name: TZ
+           value: "Asia/Shanghai"
         volumeMounts:
         - name: jenkins-volume
           subPath: jenkins-home
@@ -53,5 +57,25 @@ spec:
       volumes:
       - name: jenkins-volume
         persistentVolumeClaim:
-          claimName: cicd-pvc
+          claimName: devops-jenkins-pvc
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: jenkins-service
+  namespace: devops
+  labels:
+    app: jenkins
+spec:
+  selector:
+    app: jenkins
+  type: NodePort
+  ports:
+  - name: web
+    port: 8080
+    targetPort: web
+    nodePort: 30080
+  - name: agent
+    port: 50000
+    targetPort: agent
 
