@@ -55,7 +55,7 @@ spec:
       containers:
       - env:
         - name: PROVISIONER_NAME
-          value: justbeta.money/nfs
+          value: jenkins-provisioner-nfs
         - name: NFS_SERVER
           value: 192.168.0.110
         - name: NFS_PATH
@@ -74,7 +74,7 @@ spec:
       schedulerName: default-scheduler
       securityContext: {}
       serviceAccount: jenkins-provisioner-nfs-sa
-      serviceAccountName: jenkins-provisioner-nfs
+      serviceAccountName: jenkins-provisioner-nfs-sa
       terminationGracePeriodSeconds: 30
       volumes:
       - name: nfs-client-root
@@ -88,7 +88,7 @@ kind: StorageClass
 metadata:
   name: jenkins-nfs
   namespace: devops
-provisioner: justbeta.money/nfs
+provisioner: jenkins-provisioner-nfs
 --- # 创建pvc
 kind: PersistentVolumeClaim
 apiVersion: v1
@@ -105,7 +105,7 @@ spec:
 apiVersion: v1
 kind: ServiceAccount
 metadata:
-  name: jenkins
+  name: jenkins-sa
   namespace: devops
 
 ---
@@ -113,7 +113,7 @@ metadata:
 kind: ClusterRole
 apiVersion: rbac.authorization.k8s.io/v1
 metadata:
-  name: jenkins
+  name: jenkins-cluste-role
 rules:
   - apiGroups: ["extensions", "apps"]
     resources: ["deployments"]
@@ -133,17 +133,20 @@ rules:
   - apiGroups: [""]
     resources: ["secrets"]
     verbs: ["get"]
+  - apiGroups: [""]
+    resources: ["endpoints"]
+    verbs: ["get", "list", "watch", "create", "update", "patch"]
 
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
-  name: jenkins
+  name: jenkins-nfs-ClusterRoleBinding
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
-  name: jenkins
+  name: jenkins-cluste-role
 subjects:
   - kind: ServiceAccount
-    name: jenkins
+    name: jenkins-sa
     namespace: devops
