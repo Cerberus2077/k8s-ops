@@ -17,7 +17,7 @@ spec:
       serviceAccount: jenkins-provisioner-nfs-sa
       containers:
       - name: jenkins
-        image: jenkinsci/blueocean:latest
+        image: jenkins/jenkins:latest
         imagePullPolicy: IfNotPresent
         ports:
         - containerPort: 8080
