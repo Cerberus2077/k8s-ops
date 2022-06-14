@@ -1,8 +1,7 @@
 node('testhan') {
     stage('Clone') {
         echo "1.Clone Stage"
-        
-        git branch: 'main', credentialsId: 'github', url: '  http://github.com/cycle-luca/jenkinssaple.git'
+        git url: "https://github.com/luckylucky421/jenkins-sample.git"
         script {
             build_tag = sh(returnStdout: true, script: 'git rev-parse --short HEAD').trim()
         }
@@ -11,29 +10,23 @@ node('testhan') {
       echo "2.Test Stage"
 
     }
-    stage('scan') {
-      echo "3.scan Stage"
-
-    }
-    
-
     stage('Build') {
-        echo "4.Build Docker Image Stage"
-        sh "docker build -t harbor.justbeta.pro:8443/devops/jenkins-demo:${build_tag} ."
+        echo "3.Build Docker Image Stage"
+        sh "docker build -t xuegod/jenkins-demo:${build_tag} ."
     }
     stage('Push') {
-        echo "5.Push Docker Image Stage"
-        withCredentials([usernamePassword(credentialsId: 'harbor', passwordVariable: 'harborpassword', usernameVariable: 'harborusername')]) {
-            sh "docker login -u ${harborusername} -p ${harborpassword} harbor.justbeta.pro:8443"
-            sh "docker push harbor.justbeta.pro:8443/devops/jenkins-demo:${build_tag}"
+        echo "4.Push Docker Image Stage"
+        withCredentials([usernamePassword(credentialsId: 'dockerhub', passwordVariable: 'dockerHubPassword', usernameVariable: 'dockerHubUser')]) {
+            sh "docker login -u ${dockerHubUser} -p ${dockerHubPassword}"
+            sh "docker push xuegod/jenkins-demo:${build_tag}"
         }
     }
     stage('Deploy to dev') {
-        echo "6. Deploy DEV"
-		sh "sed -i 's/<BUILD_TAG>/${build_tag}/' k8s-dev.yaml"
-      sh "sed -i 's/<BRANCH_NAME>/${env.BRANCH_NAME}/' k8s-dev.yaml"
+        echo "5. Deploy DEV"
+		sh "sed -i 's/<BUILD_TAG>/${build_tag}/' k8s-dev-xuegod.yaml"
+      sh "sed -i 's/<BRANCH_NAME>/${env.BRANCH_NAME}/' k8s-dev-xuegod.yaml"
 //        sh "bash running-devlopment.sh"
-        sh "kubectl apply -f k8s-dev.yaml  --validate=false"
+        sh "kubectl apply -f k8s-dev-xuegod.yaml  --validate=false"
 	}	
 	stage('Promote to qa') {	
 		def userInput = input(
@@ -50,10 +43,10 @@ node('testhan') {
         )
         echo "This is a deploy step to ${userInput}"
         if (userInput == "YES") {
-            sh "sed -i 's/<BUILD_TAG>/${build_tag}/' k8s-qa.yaml"
-sh "sed -i 's/<BRANCH_NAME>/${env.BRANCH_NAME}/' k8s-qa.yaml"
+            sh "sed -i 's/<BUILD_TAG>/${build_tag}/' k8s-qa-xuegod.yaml"
+sh "sed -i 's/<BRANCH_NAME>/${env.BRANCH_NAME}/' k8s-qa-xuegod.yaml"
 //            sh "bash running-qa.sh"
-            sh "kubectl apply -f k8s-qa.yaml --validate=false"
+            sh "kubectl apply -f k8s-qa-xuegod.yaml --validate=false"
             sh "sleep 6"
             sh "kubectl get pods -n qatest"
         } else {
@@ -75,11 +68,11 @@ sh "sed -i 's/<BRANCH_NAME>/${env.BRANCH_NAME}/' k8s-qa.yaml"
         )
         echo "This is a deploy step to ${userInput}"
         if (userInput == "YES") {
-            sh "sed -i 's/<BUILD_TAG>/${build_tag}/' k8s-prod.yaml"
-            sh "sed -i 's/<BRANCH_NAME>/${env.BRANCH_NAME}/' k8s-prod.yaml"
+            sh "sed -i 's/<BUILD_TAG>/${build_tag}/' k8s-prod-xuegod.yaml"
+            sh "sed -i 's/<BRANCH_NAME>/${env.BRANCH_NAME}/' k8s-prod-xuegod.yaml"
 //            sh "bash running-production.sh"
-            sh "cat k8s-prod.yaml"
-            sh "kubectl apply -f k8s-prod.yaml --record --validate=false"
+            sh "cat k8s-prod-xuegod.yaml"
+            sh "kubectl apply -f k8s-prod-xuegod.yaml --record --validate=false"
         }
     }
 }
